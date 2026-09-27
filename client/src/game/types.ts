@@ -1,4 +1,4 @@
-export type MatchPhase = "title" | "lobby" | "playing" | "paused" | "results";
+export type MatchPhase = "title" | "lobby" | "playing" | "paused" | "results" | "deathCinematic";
 export type MonsterMode = "patrol" | "investigate" | "search" | "chase" | "return" | "enraged";
 export type ItemId = "fuse" | "spool" | "valve" | "gateKey" | "fuelCell" | "medkit" | "noiseMaker" | "battery";
 
@@ -43,6 +43,8 @@ export interface HudSnapshot {
   puzzleIndex: number;
   gateOpen: boolean;
   hidden: boolean;
+  bottles: number;
+  holdingBreath: boolean;
   monsterMode: MonsterMode;
   monsterDistance: number;
   notice: string;

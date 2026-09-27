@@ -1,4 +1,4 @@
-export type Action = "sprint" | "crouch" | "interact" | "flashlight" | "hide" | "drop" | "use" | "ping" | "pause";
+export type Action = "sprint" | "crouch" | "interact" | "flashlight" | "hide" | "drop" | "use" | "ping" | "pause" | "crank" | "throw" | "holdBreath";
 
 const keyActions: Record<string, Action> = {
   ShiftLeft: "sprint",
@@ -14,6 +14,9 @@ const keyActions: Record<string, Action> = {
   KeyG: "ping",
   KeyQ: "drop",
   Space: "use",
+  KeyR: "crank",
+  KeyT: "throw",
+  KeyB: "holdBreath",
   Escape: "pause",
 };
 
@@ -90,6 +93,9 @@ export class InputController {
     if (event.button === 0) {
       this.mouseDown = true;
       this.requestLock();
+    } else if (event.button === 2) {
+      this.setAction("throw", true);
+      this.setAction("holdBreath", true);
     }
   };
 
@@ -97,7 +103,6 @@ export class InputController {
     if ((event.target as HTMLElement)?.closest?.("button, input, a, [data-control], #coop-overlay")) return;
     if (event.pointerType !== "touch" && event.button === 0) {
       this.mouseDown = true;
-      // Re-acquire pointer lock on viewport click if unlocked
       if (document.pointerLockElement !== this.canvas) {
         this.requestLock();
       }
@@ -106,7 +111,13 @@ export class InputController {
 
   private readonly pointerUp = (event: PointerEvent) => {
     if (this.lookPointer === event.pointerId) this.lookPointer = null;
-    if (event.pointerType !== "touch") this.mouseDown = false;
+    if (event.pointerType !== "touch") {
+      if (event.button === 0) this.mouseDown = false;
+      if (event.button === 2) {
+        this.setAction("throw", false);
+        this.setAction("holdBreath", false);
+      }
+    }
   };
 
   private readonly pointerMove = (event: PointerEvent) => {

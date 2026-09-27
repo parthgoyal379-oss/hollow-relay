@@ -147,3 +147,29 @@
 .item-exam-actions{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
 .item-exam-actions .primary-button{min-width:160px}
 
+/* ========================================================
+   AAA DEATH JUMPSCARE & CINEMATIC SCREEN
+   ======================================================== */
+.death-cinematic-screen{position:fixed;inset:0;z-index:90;display:flex;flex-direction:column;align-items:center;justify-content:center;background:radial-gradient(circle,rgba(180,20,10,.65) 0%,rgba(5,2,2,.98) 75%);pointer-events:none;animation:death-shockwave .15s infinite alternate}
+@keyframes death-shockwave{from{filter:contrast(1.6) brightness(0.9) hue-rotate(-10deg)}to{filter:contrast(2.2) brightness(1.2) hue-rotate(15deg)}}
+.death-stamp{border:4px solid #e23b2b;padding:12px 32px;font:800 clamp(32px,6vw,56px)/1 'Barlow Condensed',sans-serif;color:#fce4e4;letter-spacing:.25em;background:rgba(40,4,4,.85);box-shadow:0 0 50px rgba(226,59,43,.8);text-shadow:0 0 20px #e23b2b;transform:rotate(-4deg);margin-bottom:20px}
+.death-reason{font:600 clamp(14px,2.5vw,22px)/1.4 'IBM Plex Mono',monospace;color:#ff9e94;letter-spacing:.15em;text-align:center;max-width:680px;text-shadow:0 0 12px rgba(255,100,80,.6)}
+
+/* Wardrobe Hiding Slats Vignette */
+.hiding-vignette{position:fixed;inset:0;z-index:35;pointer-events:none;display:none;background:radial-gradient(circle,transparent 30%,rgba(0,0,0,.92) 80%);box-shadow:inset 0 0 140px #000}
+.hiding-vignette.active{display:block}
+.hiding-slats{position:absolute;inset:0;background:repeating-linear-gradient(0deg,rgba(0,0,0,.75) 0px,rgba(0,0,0,.75) 18px,transparent 18px,transparent 36px);opacity:.65}
+.breath-prompt{position:absolute;bottom:14%;left:50%;transform:translateX(-50%);display:flex;align-items:center;gap:12px;background:rgba(12,16,14,.9);border:1px solid #c29557;padding:8px 20px;border-radius:3px;box-shadow:0 0 30px rgba(0,0,0,.9)}
+.breath-prompt strong{font:700 13px 'Barlow Condensed',sans-serif;color:#f4d084;letter-spacing:.16em}
+.breath-meter{width:110px;height:6px;background:rgba(40,45,40,.8);border:1px solid rgba(194,149,87,.3);overflow:hidden}
+.breath-meter i{display:block;height:100%;background:#52c468;transition:width .1s linear}
+.breath-prompt.holding strong{color:#e23b2b}
+.breath-prompt.holding .breath-meter i{background:#e23b2b}
+
+/* Survival Equipment Quickbar */
+.survival-toolbar{display:flex;gap:10px;align-items:center;background:rgba(10,14,12,.82);border:1px solid rgba(194,149,87,.28);padding:6px 12px;backdrop-filter:blur(6px)}
+.tool-chip{display:flex;align-items:center;gap:6px;font-size:9px;color:#a89e8c;letter-spacing:.12em}
+.tool-chip kbd{background:rgba(194,149,87,.2);border:1px solid rgba(194,149,87,.4);padding:2px 5px;border-radius:2px;font-weight:700;color:#f0dab0}
+.tool-chip strong{color:#e8ddc7}
+
+

@@ -35,14 +35,21 @@ export class ListenerAI {
     this.targetRoom = start.id;
   }
 
-  update(dt: number, player: WorldPoint, hidden: boolean, flashlight: boolean, noises: NoiseEvent[], visible: boolean, finalPhase: boolean) {
+  update(dt: number, player: WorldPoint, hidden: boolean, flashlight: boolean, noises: NoiseEvent[], visible: boolean, finalPhase: boolean, holdingBreath = false) {
     this.stateTime += dt;
     this.attackCooldown = Math.max(0, this.attackCooldown - dt);
     this.finalPhase = finalPhase;
     const playerDistance = Math.hypot(player.x - this.x, player.z - this.z);
     const playerRoom = nearestRoom(player.x, player.z);
     const currentRoom = nearestRoom(this.x, this.z);
-    const canSee = !hidden && visible && playerDistance < (finalPhase ? 21 : flashlight ? 16 : 11);
+
+    const breathingNoise = noises.some(n => (n.kind === "breathing" || n.kind === "gasping breath") && Math.hypot(n.point.x - this.x, n.point.z - this.z) < 4.0);
+    const detectedInHiding = hidden && ((flashlight && playerDistance < 3.5) || (breathingNoise && playerDistance < 2.6));
+    const canSee = (!hidden && visible && playerDistance < (finalPhase ? 21 : flashlight ? 16 : 11)) || detectedInHiding;
+
+    if (detectedInHiding && this.mode !== "chase" && this.mode !== "enraged") {
+      this.callbacks.onNotice(flashlight ? "LAMP BEAM REVEALED YOUR HIDING SPOT!" : "IT HEARD YOUR BREATHING INSIDE! BREAK OUT!");
+    }
 
     if (canSee) {
       this.lostSightTime = 0;

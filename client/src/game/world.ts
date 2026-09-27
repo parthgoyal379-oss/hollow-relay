@@ -23,6 +23,9 @@ export class GameWorld {
   flashlight = false;
   battery = 100;
   hidden = false;
+  bottles = 3;
+  holdingBreath = false;
+  deathCinematicTimer = 0;
   relayReady = false;
   gateOpen = false;
   escapes = 0;
@@ -59,6 +62,9 @@ export class GameWorld {
     this.flashlight = false;
     this.battery = 100;
     this.hidden = false;
+    this.bottles = 3;
+    this.holdingBreath = false;
+    this.deathCinematicTimer = 0;
     this.monsterMode = "patrol";
     this.monsterDistance = 50;
     this.relayReady = false;
@@ -85,7 +91,14 @@ export class GameWorld {
     this.say(`BIO-ACOUSTIC HAZARD // BLACKWATER ESTATE · Shift ${String((seed >>> 0) % 90 + 10)}`);
   }
 
-  update(dt: number, point: WorldPoint, moving: boolean, sprinting: boolean) {
+  update(dt: number, point: WorldPoint, moving: boolean, sprinting: boolean, holdingBreath = false) {
+    if (this.phase === "deathCinematic") {
+      this.deathCinematicTimer -= dt;
+      if (this.deathCinematicTimer <= 0) {
+        this.finish(false);
+      }
+      return;
+    }
     if (this.phase !== "playing") return;
     this.elapsed += dt;
     this.damageCooldown = Math.max(0, this.damageCooldown - dt);
@@ -93,16 +106,33 @@ export class GameWorld {
     this.noticeTimer = Math.max(0, this.noticeTimer - dt);
     this.noiseEvents = this.noiseEvents.filter(event => (performance.now() - event.at) < 12000);
     this.noise = Math.max(0, this.noise - dt * 0.23);
-    if (sprinting && moving) {
+
+    this.holdingBreath = this.hidden && holdingBreath;
+    if (this.hidden) {
+      if (this.holdingBreath) {
+        this.stamina = Math.max(0, this.stamina - dt * 25);
+        if (this.stamina <= 0) {
+          this.holdingBreath = false;
+          this.makeNoise(point, 0.65, "gasping breath");
+          this.say("LUNGS BURNING — YOU GASPED FOR AIR!");
+        }
+      } else {
+        this.stamina = Math.min(100, this.stamina + dt * 10);
+        if (this.monsterDistance < 4.5) {
+          this.makeNoise(point, 0.08, "breathing");
+        }
+      }
+    } else if (sprinting && moving) {
       this.stamina = Math.max(0, this.stamina - dt * 17);
       if (Math.floor(this.elapsed) !== Math.floor(this.elapsed - dt) && Math.floor(this.elapsed) % 2 === 0) this.makeNoise(point, 0.2, "running steps");
     } else {
       this.stamina = Math.min(100, this.stamina + dt * (moving ? 8 : 15));
-      if (moving && Math.floor(this.elapsed * 2) !== Math.floor((this.elapsed - dt) * 2)) this.makeNoise(point, this.hidden ? 0.025 : 0.075, "footsteps");
+      if (moving && Math.floor(this.elapsed * 2) !== Math.floor((this.elapsed - dt) * 2)) this.makeNoise(point, 0.075, "footsteps");
     }
+
     if (this.flashlight) {
       this.battery = Math.max(0, this.battery - dt * 0.9);
-      if (this.battery === 0) { this.flashlight = false; this.say("The flashlight dies."); }
+      if (this.battery === 0) { this.flashlight = false; this.say("The flashlight dies. Press [R] to crank dynamo."); }
     }
     const finalPhaseDuration = this.demo ? 24 : 180;
     if (!this.finalAnnounced && this.elapsed >= this.maxTime - finalPhaseDuration) {
@@ -110,7 +140,11 @@ export class GameWorld {
       this.say("THE LAST SIGNAL — the Listener is moving faster.");
     }
     if (this.elapsed >= this.maxTime) this.finish(false);
-    if (this.health <= 0) this.finish(false);
+    if (this.health <= 0 && this.phase === "playing") {
+      this.phase = "deathCinematic";
+      this.deathCinematicTimer = 3.2;
+      this.say("SIGNAL SEVERED — HARVESTED BY COLE.");
+    }
   }
 
   makeNoise(point: WorldPoint, intensity: number, kind: string) {
@@ -244,11 +278,42 @@ export class GameWorld {
   ping(point: WorldPoint) { this.makeNoise(point, 0.24, "survivor ping"); this.say("Signal ping sent."); }
 
   monsterHit() {
-    if (this.damageCooldown > 0 || this.hidden || this.phase !== "playing") return;
+    if (this.damageCooldown > 0 || this.phase !== "playing") return;
     this.damageCooldown = 3.2;
     this.health = Math.max(0, this.health - 52);
     this.stamina = Math.max(0, this.stamina - 25);
-    this.say(this.health > 0 ? "The Listener catches your shoulder. Break away." : "The signal goes silent.");
+    if (this.hidden) {
+      this.hidden = false;
+      this.say("COLE RIPPED OPEN YOUR COVER!");
+    }
+    if (this.health <= 0) {
+      this.phase = "deathCinematic";
+      this.deathCinematicTimer = 3.2;
+      this.say("SIGNAL SEVERED — HARVESTED BY COLE.");
+    } else {
+      this.say("The Listener catches your shoulder. Break away.");
+    }
+  }
+
+  crankDynamo(point: WorldPoint): boolean {
+    if (this.phase !== "playing") return false;
+    this.battery = Math.min(100, this.battery + 22);
+    this.makeNoise(point, 0.38, "dynamo crank");
+    this.say(`Dynamo wound (+22% battery: ${Math.round(this.battery)}%). Gears clattered.`);
+    return true;
+  }
+
+  throwBottle(from: WorldPoint, dirX: number, dirZ: number): WorldPoint | null {
+    if (this.phase !== "playing" || this.bottles <= 0) {
+      if (this.bottles <= 0) this.say("No bottles left to throw.");
+      return null;
+    }
+    this.bottles--;
+    const dist = 9.5;
+    const target: WorldPoint = { x: from.x + dirX * dist, z: from.z + dirZ * dist };
+    this.makeNoise(target, 0.95, "glass bottle shatter");
+    this.say(`Bottle shattered across the hall! (${this.bottles} left).`);
+    return target;
   }
 
   count(type: ItemId) { return this.inventory.filter(item => item.id === type).length; }
@@ -260,7 +325,7 @@ export class GameWorld {
   }
 
   finish(won: boolean) {
-    if (this.phase !== "playing") return;
+    if (this.phase !== "playing" && this.phase !== "deathCinematic") return;
     this.phase = "results";
     if (won) this.escapes = 1;
     this.say(won ? "YOU ESCAPED — the signal made it out." : "THE ESTATE KEEPS ITS QUIET.");
@@ -277,7 +342,8 @@ export class GameWorld {
       battery: this.battery, inventory: [...this.inventory], objective: this.objective,
       relayParts: this.relayParts, relayReady: this.relayReady, gateOpen: this.gateOpen,
       relayPuzzleActive: this.relayPuzzleActive, puzzlePattern: [...this.puzzlePattern], puzzleIndex: this.puzzleIndex,
-      hidden: this.hidden, monsterMode: this.monsterMode, monsterDistance: this.monsterDistance,
+      hidden: this.hidden, bottles: this.bottles, holdingBreath: this.holdingBreath,
+      monsterMode: this.monsterMode, monsterDistance: this.monsterDistance,
       notice: this.noticeTimer > 0 ? this.notice : "", room: "", escapes: this.escapes, demo: this.demo,
       dossiersRead: this.readDossiers.size,
       totalDossiers: LORE_DOCUMENTS.length,

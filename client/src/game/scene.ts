@@ -3,8 +3,10 @@ import { Vector3 } from "@babylonjs/core/Maths/math.vector";
 import { HemisphericLight } from "@babylonjs/core/Lights/hemisphericLight";
 import { PointLight } from "@babylonjs/core/Lights/pointLight";
 import { SpotLight } from "@babylonjs/core/Lights/spotLight";
+import { DirectionalLight } from "@babylonjs/core/Lights/directionalLight";
 import { Mesh } from "@babylonjs/core/Meshes/mesh";
 import { MeshBuilder } from "@babylonjs/core/Meshes/meshBuilder";
+import { TransformNode } from "@babylonjs/core/Meshes/transformNode";
 import { Ray } from "@babylonjs/core/Culling/ray";
 import { Scene } from "@babylonjs/core/scene";
 import { StandardMaterial } from "@babylonjs/core/Materials/standardMaterial";
@@ -130,10 +132,50 @@ export async function createGameScene(engine: Engine, canvas: HTMLCanvasElement)
   const darkWood = makeMat(scene, "blackened-wood", new Color3(0.105, 0.082, 0.061));
   const trimMat = makeMat(scene, "oxidized-iron", new Color3(0.14, 0.18, 0.16), new Color3(0.04, 0.055, 0.045));
   const amberMat = makeMat(scene, "amber-lantern", new Color3(0.22, 0.13, 0.055), new Color3(0.78, 0.43, 0.12));
+  amberMat.emissiveColor = new Color3(0.78, 0.43, 0.12);
   const redMat = makeMat(scene, "warning-red", new Color3(0.27, 0.025, 0.018), new Color3(0.72, 0.04, 0.015));
+  redMat.emissiveColor = new Color3(0.72, 0.04, 0.015);
   const furnitureMat = makeMat(scene, "dust-cloth", new Color3(0.17, 0.18, 0.15));
   const entityMat = makeMat(scene, "listener-shadow", new Color3(0.012, 0.016, 0.015), new Color3(0.012, 0.018, 0.014));
   const eyeMat = makeMat(scene, "listener-ember", new Color3(0.27, 0.055, 0.02), new Color3(0.62, 0.075, 0.025));
+  eyeMat.emissiveColor = new Color3(0.85, 0.15, 0.05);
+
+  const brassMat = makeMat(scene, "antique-brass", new Color3(0.55, 0.42, 0.15), new Color3(0.85, 0.65, 0.25));
+  const clothMat = makeMat(scene, "damask-cloth", new Color3(0.48, 0.46, 0.42), new Color3(0.08, 0.08, 0.08));
+  const bloodMat = makeMat(scene, "coagulated-blood", new Color3(0.22, 0.015, 0.01), new Color3(0.5, 0.02, 0.01));
+  const rustMetal = makeMat(scene, "rusted-iron", new Color3(0.22, 0.12, 0.09), new Color3(0.08, 0.05, 0.03));
+  const boilerIron = makeMat(scene, "boiler-plate", new Color3(0.11, 0.12, 0.13), new Color3(0.18, 0.18, 0.2));
+  const glassTranslucent = new StandardMaterial("glass-translucent", scene);
+  glassTranslucent.diffuseColor = new Color3(0.15, 0.35, 0.28);
+  glassTranslucent.specularColor = new Color3(0.9, 0.95, 0.9);
+  glassTranslucent.alpha = 0.55;
+  const carpetVelvet = makeMat(scene, "velvet-carpet", new Color3(0.28, 0.04, 0.03), new Color3(0.06, 0.02, 0.02));
+  const stoneMat = makeMat(scene, "weathered-stone", new Color3(0.32, 0.34, 0.31), new Color3(0.05, 0.05, 0.05));
+  const parchmentPaper = makeMat(scene, "parchment-paper", new Color3(0.68, 0.62, 0.48), new Color3(0.02, 0.02, 0.02));
+  const fireGlowMat = makeMat(scene, "firebox-glow", new Color3(0.95, 0.38, 0.05), new Color3(1.0, 0.55, 0.1));
+  fireGlowMat.emissiveColor = new Color3(0.95, 0.38, 0.05);
+
+  interface DoorEntry {
+    id: string;
+    mesh: Mesh;
+    pivot: TransformNode;
+    pos: Vector3;
+    open: boolean;
+    broken: boolean;
+    currentAngle: number;
+    targetAngle: number;
+    collider: Box;
+    isVertical: boolean;
+  }
+  const estateDoors: DoorEntry[] = [];
+
+  interface ActiveBottle {
+    mesh: Mesh;
+    pos: Vector3;
+    vel: Vector3;
+  }
+  const activeBottles: ActiveBottle[] = [];
+  let lightningTimer = 12;
 
   const colliders: Box[] = [];
   const wallMeshes = new Set<Mesh>();
@@ -207,11 +249,10 @@ export async function createGameScene(engine: Engine, canvas: HTMLCanvasElement)
     const wardrobeX = room.x - 3.65; const wardrobeZ = room.z + 3.55;
     const wardrobe = addBox(`${room.id}-wardrobe`, wardrobeX, 1.15, wardrobeZ, 1.25, 2.3, 1.1, darkWood, true);
     addBox(`${room.id}-wardrobe-panel`, wardrobeX, 1.17, wardrobeZ - 0.57, 1.08, 1.95, 0.035, furnitureMat);
-    addBox(`${room.id}-wardrobe-knob`, wardrobeX + 0.4, 1.12, wardrobeZ - 0.61, 0.07, 0.08, 0.055, trimMat);
+    addBox(`${room.id}-wardrobe-knob`, wardrobeX + 0.4, 1.12, wardrobeZ - 0.61, 0.07, 0.08, 0.055, brassMat);
     wardrobe.metadata = { hiding: true };
-    const tableX = room.x + 3.25; const tableZ = room.z - 3.5;
-    addBox(`${room.id}-low-table`, tableX, 0.72, tableZ, 1.9, 0.18, 1.35, darkWood, true);
-    for (const dx of [-0.75, 0.75]) for (const dz of [-0.48, 0.48]) addBox(`${room.id}-table-leg`, tableX + dx, 0.34, tableZ + dz, 0.12, 0.7, 0.12, darkWood);
+
+    // Handcrafted Unique Thematic Props for Every Room
     if (room.id === "relay") {
       addBox("relay-console-body", 0, 1.4, -1.4, 4.2, 2.8, 0.8, darkWood, true);
       addBox("relay-console-face", 0, 2, -0.96, 3.85, 1.42, 0.08, trimMat);
@@ -222,14 +263,101 @@ export async function createGameScene(engine: Engine, canvas: HTMLCanvasElement)
         addBox(`lamp-label-${i + 1}`, x, 1.55, -0.87, 0.48, 0.22, 0.08, darkWood);
       }
       addBox("console-bottom", 0, 0.92, -0.93, 2.5, 0.12, 0.1, trimMat);
-    }
-    if (room.id === "gate") {
+      const oscScreen = MeshBuilder.CreateCylinder("relay-osc-screen", { diameter: 0.72, height: 0.08, tessellation: 24 }, scene);
+      oscScreen.rotation.x = Math.PI / 2; oscScreen.position.set(-1.35, 2.45, -0.94); oscScreen.material = amberMat;
+      for (let t = 0; t < 6; t++) {
+        const tx = -1.5 + t * 0.6;
+        const tube = MeshBuilder.CreateCylinder(`relay-tube-${t}`, { diameter: 0.14, height: 0.35, tessellation: 12 }, scene);
+        tube.position.set(tx, 2.95, -1.4); tube.material = amberMat;
+      }
+      addBox("relay-cable-tray", 0, 4.1, 0, 0.4, 0.08, 11.2, trimMat);
+    } else if (room.id === "dining") {
+      addBox("dining-table-top", room.x, 0.76, room.z, 5.8, 0.14, 1.8, darkWood, true);
+      addBox("dining-table-cloth", room.x, 0.84, room.z, 5.5, 0.03, 1.5, clothMat);
+      for (const dx of [-2.4, 2.4]) for (const dz of [-0.65, 0.65]) addBox(`dining-leg-${dx}-${dz}`, room.x + dx, 0.38, room.z + dz, 0.18, 0.76, 0.18, darkWood);
+      for (let i = 0; i < 4; i++) {
+        const cx = room.x - 1.8 + i * 1.2;
+        addBox(`chair-n-${i}`, cx, 0.48, room.z + 1.25, 0.5, 0.96, 0.5, darkWood);
+        addBox(`chair-s-${i}`, cx, 0.48, room.z - 1.25, 0.5, 0.96, 0.5, darkWood);
+      }
+      addBox("dining-candelabra-1", room.x - 1.5, 1.05, room.z, 0.15, 0.45, 0.45, brassMat);
+      addBox("dining-candelabra-2", room.x + 1.5, 1.05, room.z, 0.15, 0.45, 0.45, brassMat);
+      addBox("dining-fireplace", room.x + 5.55, 1.4, room.z, 0.55, 2.5, 2.8, stoneMat, true);
+      addBox("dining-hearth", room.x + 5.35, 0.3, room.z, 0.4, 0.25, 1.8, fireGlowMat);
+      addBox("dining-blood-spill", room.x + 0.6, 0.02, room.z - 0.5, 1.4, 0.01, 1.1, bloodMat);
+    } else if (room.id === "archive") {
+      addBox("archive-shelf-1", room.x - 2.4, 1.8, room.z + 2.0, 4.2, 3.4, 0.65, darkWood, true);
+      addBox("archive-shelf-2", room.x + 2.4, 1.8, room.z + 2.0, 4.2, 3.4, 0.65, darkWood, true);
+      addBox("archive-shelf-3", room.x - 2.4, 1.8, room.z - 2.0, 4.2, 3.4, 0.65, darkWood, true);
+      addBox("archive-shelf-4", room.x + 2.4, 1.8, room.z - 2.0, 4.2, 3.4, 0.65, darkWood, true);
+      addBox("archive-water-sheet", room.x, 0.03, room.z, 11.4, 0.02, 11.4, glassTranslucent);
+      for (let p = 0; p < 8; p++) {
+        const px = room.x + (Math.sin(p * 1.7) * 4.2);
+        const pz = room.z + (Math.cos(p * 2.1) * 4.2);
+        addBox(`floating-doc-${p}`, px, 0.04, pz, 0.38, 0.01, 0.28, parchmentPaper);
+      }
+      addBox("archive-reading-desk", room.x, 0.72, room.z, 1.6, 0.14, 0.9, darkWood, true);
+      addBox("archive-banker-lamp", room.x - 0.4, 0.95, room.z, 0.22, 0.25, 0.22, brassMat);
+    } else if (room.id === "dormitory") {
+      addBox("dorm-bunk-1", room.x - 4.4, 1.4, room.z - 1.8, 1.2, 2.4, 2.6, rustMetal, true);
+      addBox("dorm-bunk-2", room.x - 4.4, 1.4, room.z + 1.8, 1.2, 2.4, 2.6, rustMetal, true);
+      addBox("dorm-bunk-3", room.x + 4.4, 1.4, room.z + 1.8, 1.2, 2.4, 2.6, rustMetal, true);
+      addBox("dorm-bed-cloth-1", room.x - 4.4, 0.65, room.z - 1.8, 1.05, 0.18, 2.4, clothMat);
+      addBox("dorm-bed-cloth-2", room.x - 4.4, 0.65, room.z + 1.8, 1.05, 0.18, 2.4, clothMat);
+      addBox("dorm-bed-cloth-3", room.x + 4.4, 0.65, room.z + 1.8, 1.05, 0.18, 2.4, clothMat);
+      addBox("footlocker-1", room.x - 4.4, 0.25, room.z - 3.4, 0.65, 0.5, 1.0, darkWood);
+      addBox("footlocker-2", room.x - 4.4, 0.25, room.z + 3.4, 0.65, 0.5, 1.0, darkWood);
+      addBox("dorm-coat-rack", room.x + 4.2, 1.3, room.z - 3.8, 0.12, 2.5, 0.12, darkWood);
+      addBox("dorm-hanging-coat", room.x + 4.2, 1.55, room.z - 3.8, 0.45, 1.35, 0.35, entityMat);
+    } else if (room.id === "gallery") {
+      addBox("portrait-frame-n1", room.x - 2.5, 2.4, room.z + 5.75, 1.8, 2.1, 0.08, brassMat);
+      addBox("portrait-frame-n2", room.x + 2.5, 2.4, room.z + 5.75, 1.8, 2.1, 0.08, brassMat);
+      addBox("portrait-frame-s1", room.x - 2.5, 2.4, room.z - 5.75, 1.8, 2.1, 0.08, brassMat);
+      addBox("portrait-frame-s2", room.x + 2.5, 2.4, room.z - 5.75, 1.8, 2.1, 0.08, brassMat);
+      addBox("gallery-velvet-carpet", room.x, 0.03, room.z, 2.2, 0.02, 11.2, carpetVelvet);
+      addBox("gallery-bust-1", room.x - 3.2, 0.65, room.z, 0.5, 1.3, 0.5, stoneMat, true);
+      addBox("gallery-bust-head-1", room.x - 3.2, 1.55, room.z, 0.35, 0.45, 0.35, stoneMat);
+      addBox("gallery-bust-2", room.x + 3.2, 0.65, room.z, 0.5, 1.3, 0.5, stoneMat, true);
+      addBox("gallery-bust-head-2", room.x + 3.2, 1.55, room.z, 0.35, 0.45, 0.35, stoneMat);
+    } else if (room.id === "kitchen") {
+      addBox("kitchen-butcher-block", room.x, 0.85, room.z, 2.4, 0.9, 1.4, darkWood, true);
+      addBox("kitchen-cleaver", room.x, 1.35, room.z, 0.04, 0.22, 0.35, trimMat);
+      addBox("kitchen-blood-block", room.x, 1.31, room.z, 1.8, 0.02, 1.1, bloodMat);
+      addBox("kitchen-stove-body", room.x + 4.4, 1.1, room.z, 1.4, 2.2, 2.8, rustMetal, true);
+      addBox("kitchen-stove-chimney", room.x + 4.4, 3.2, room.z, 0.35, 2.0, 0.35, rustMetal);
+      addBox("kitchen-hook-rack", room.x, 3.6, room.z, 2.6, 0.1, 0.9, rustMetal);
+    } else if (room.id === "boiler") {
+      addBox("boiler-tank", room.x - 1.2, 1.6, room.z, 3.2, 2.6, 4.8, boilerIron, true);
+      addBox("boiler-firebox", room.x + 0.45, 0.75, room.z, 0.25, 0.9, 1.2, fireGlowMat);
+      addBox("boiler-steam-pipe", room.x, 3.8, room.z, 0.18, 0.18, 10.4, rustMetal);
+      addBox("boiler-coal-pile", room.x + 3.6, 0.35, room.z - 2.8, 2.4, 0.65, 2.4, darkWood, true);
+      addBox("boiler-shovel", room.x + 2.5, 0.65, room.z - 2.8, 0.12, 1.2, 0.25, trimMat);
+    } else if (room.id === "conservatory") {
+      addBox("conservatory-fountain", room.x, 0.42, room.z, 3.2, 0.7, 3.2, stoneMat, true);
+      addBox("conservatory-water", room.x, 0.62, room.z, 2.6, 0.05, 2.6, glassTranslucent);
+      addBox("conservatory-planter-1", room.x - 4.4, 0.45, room.z, 0.85, 0.75, 4.8, rustMetal, true);
+      addBox("conservatory-planter-2", room.x + 4.4, 0.45, room.z, 0.85, 0.75, 4.8, rustMetal, true);
+    } else if (room.id === "stairwell") {
+      addBox("stair-ramp", room.x - 3.4, 1.4, room.z, 2.4, 2.4, 4.4, darkWood, true);
+      addBox("stair-beam", room.x - 2.8, 1.9, room.z + 0.4, 0.35, 0.35, 3.8, darkWood, true);
+      addBox("stair-crate-1", room.x + 3.6, 0.5, room.z - 2.8, 1.2, 0.95, 1.4, darkWood, true);
+      addBox("stair-crate-2", room.x + 3.6, 1.4, room.z - 2.8, 1.0, 0.85, 1.2, darkWood, true);
+    } else if (room.id === "tunnel") {
+      addBox("tunnel-arch-1", room.x, 3.4, room.z - 3.5, 11.2, 0.45, 0.6, stoneMat);
+      addBox("tunnel-arch-2", room.x, 3.4, room.z, 11.2, 0.45, 0.6, stoneMat);
+      addBox("tunnel-arch-3", room.x, 3.4, room.z + 3.5, 11.2, 0.45, 0.6, stoneMat);
+      addBox("tunnel-drain", room.x, 0.02, room.z, 0.85, 0.04, 11.4, rustMetal);
+    } else if (room.id === "yard") {
+      addBox("yard-obelisk-base", room.x, 0.45, room.z, 1.8, 0.8, 1.8, stoneMat, true);
+      addBox("yard-obelisk-spire", room.x, 2.2, room.z, 0.8, 2.8, 0.8, stoneMat, true);
+    } else if (room.id === "gate") {
       for (let i = 0; i < 7; i++) gateBars.push(addBox(`gate-iron-bar-${i}`, 28 + (i - 3) * 0.55, 1.7, -34, 0.12, 3.4, 0.14, trimMat, true));
       addBox("gate-beam", 28, 3.4, -34, 4.2, 0.16, 0.18, trimMat);
+      addBox("gate-hydraulic-ram", 28 - 2.4, 1.6, -34.2, 0.45, 3.2, 0.45, boilerIron, true);
     }
   }
 
-  // Build enclosed corridors between adjacent rooms to eliminate empty voids and falling out
+  // Build enclosed corridors between adjacent rooms with interactive wooden doors
   const visitedPairs = new Set<string>();
   for (const room of rooms) {
     for (const neighborId of room.neighbors) {
@@ -262,6 +390,27 @@ export async function createGameScene(engine: Engine, canvas: HTMLCanvasElement)
 
         addWall(gapX, z + halfDoor, gapLen, 0.34);
         addWall(gapX, z - halfDoor, gapLen, 0.34);
+
+        if (!isOutside) {
+          const pivot = new TransformNode(`door-pivot-${pairKey}`, scene);
+          pivot.position.set(gapX, 0, z - 0.7);
+          const doorMesh = MeshBuilder.CreateBox(`door-leaf-${pairKey}`, { width: 0.12, height: 2.8, depth: 1.4 }, scene);
+          doorMesh.position.set(0, 1.4, 0.7);
+          doorMesh.parent = pivot;
+          doorMesh.material = darkWood;
+          const handle = MeshBuilder.CreateBox(`door-handle-${pairKey}`, { width: 0.22, height: 0.08, depth: 0.08 }, scene);
+          handle.position.set(0, 1.35, 1.25);
+          handle.parent = pivot;
+          handle.material = brassMat;
+
+          const doorBox: Box = { x: gapX, z, hx: 0.2, hz: 0.8, mesh: doorMesh };
+          colliders.push(doorBox);
+          estateDoors.push({
+            id: pairKey, mesh: doorMesh, pivot, pos: new Vector3(gapX, 1.4, z),
+            open: false, broken: false, currentAngle: 0, targetAngle: 0,
+            collider: doorBox, isVertical: false,
+          });
+        }
       } else if (room.col === n.col) {
         // Vertical connection (North - South)
         const bottomRoom = room.row < n.row ? room : n;
@@ -278,9 +427,54 @@ export async function createGameScene(engine: Engine, canvas: HTMLCanvasElement)
 
         addWall(x + halfDoor, gapZ, 0.34, gapLen);
         addWall(x - halfDoor, gapZ, 0.34, gapLen);
+
+        if (!isOutside) {
+          const pivot = new TransformNode(`door-pivot-${pairKey}`, scene);
+          pivot.position.set(x - 0.7, 0, gapZ);
+          const doorMesh = MeshBuilder.CreateBox(`door-leaf-${pairKey}`, { width: 1.4, height: 2.8, depth: 0.12 }, scene);
+          doorMesh.position.set(0.7, 1.4, 0);
+          doorMesh.parent = pivot;
+          doorMesh.material = darkWood;
+          const handle = MeshBuilder.CreateBox(`door-handle-${pairKey}`, { width: 0.08, height: 0.08, depth: 0.22 }, scene);
+          handle.position.set(1.25, 1.35, 0);
+          handle.parent = pivot;
+          handle.material = brassMat;
+
+          const doorBox: Box = { x, z: gapZ, hx: 0.8, hz: 0.2, mesh: doorMesh };
+          colliders.push(doorBox);
+          estateDoors.push({
+            id: pairKey, mesh: doorMesh, pivot, pos: new Vector3(x, 1.4, gapZ),
+            open: false, broken: false, currentAngle: 0, targetAngle: 0,
+            collider: doorBox, isVertical: true,
+          });
+        }
       }
     }
   }
+
+  // Outdoor Rain Particle System for the Black Yard
+  const rain = new ParticleSystem("outdoorRain", 280, scene);
+  rain.particleTexture = dustTex;
+  rain.emitter = new Vector3(20, 9.5, -28);
+  rain.minEmitBox = new Vector3(-12, 0, -12);
+  rain.maxEmitBox = new Vector3(12, 0, 12);
+  rain.color1 = new Color4(0.65, 0.75, 0.85, 0.4);
+  rain.color2 = new Color4(0.5, 0.6, 0.7, 0.2);
+  rain.colorDead = new Color4(0, 0, 0, 0);
+  rain.minSize = 0.02;
+  rain.maxSize = 0.05;
+  rain.minLifeTime = 0.6;
+  rain.maxLifeTime = 1.1;
+  rain.emitRate = 180;
+  rain.gravity = new Vector3(0, -22, 0);
+  rain.direction1 = new Vector3(-0.4, -1, 0.1);
+  rain.direction2 = new Vector3(-0.1, -1, -0.1);
+  rain.start();
+
+  // Sky Lightning Flash
+  const lightningLight = new DirectionalLight("skyLightning", new Vector3(0.2, -1, 0.3), scene);
+  lightningLight.diffuse = new Color3(0.88, 0.94, 1.0);
+  lightningLight.intensity = 0;
 
   // A rain-blackened outer path and a broken perimeter are visible through the open yard.
   for (let i = 0; i < 12; i++) {
@@ -363,7 +557,11 @@ export async function createGameScene(engine: Engine, canvas: HTMLCanvasElement)
       if (!world.demo) {
         world.monsterHit();
         cameraTrauma = 1.0;
-        audio.cue(44, 0.45, 0.28);
+        if (world.phase === "deathCinematic") {
+          audio.jumpscareDeath();
+        } else {
+          audio.cue(44, 0.45, 0.28);
+        }
       }
     },
     onMode: mode => {
@@ -604,6 +802,8 @@ export async function createGameScene(engine: Engine, canvas: HTMLCanvasElement)
     if (item) return `TAKE ${item.name.toUpperCase()}`;
     const dossier = world.nearestDossier(point);
     if (dossier && world.dossierCooldown <= 0) return `READ DOSSIER · ${dossier.title} [E]`;
+    const nearDoor = estateDoors.find(d => !d.broken && Math.hypot(d.pos.x - point.x, d.pos.z - point.z) < 2.5);
+    if (nearDoor) return nearDoor.open ? "CLOSE DOOR [E]" : "OPEN DOOR [E]";
     if (Math.hypot(point.x, point.z) < 5.4 && !world.relayReady) return world.relayPuzzleActive ? "ALIGN THE SIGNAL LAMPS · 1 / 2 / 3" : "EXAMINE THE RELAY CONSOLE";
     if (Math.hypot(point.x - 28, point.z + 28) < 5 && !world.gateOpen) return world.relayReady ? "UNLOCK THE IRON GATE" : "THE GATE IS DEAD";
     if (Math.hypot(point.x - 28, point.z + 28) < 5 && world.gateOpen) return "ESCAPE THROUGH THE GATE";
@@ -616,6 +816,21 @@ export async function createGameScene(engine: Engine, canvas: HTMLCanvasElement)
     if (world.activeDossier) {
       world.closeDossier();
       audio.pageRustle();
+      return;
+    }
+    const nearDoor = estateDoors.find(d => !d.broken && Math.hypot(d.pos.x - point.x, d.pos.z - point.z) < 2.5);
+    if (nearDoor) {
+      nearDoor.open = !nearDoor.open;
+      nearDoor.targetAngle = nearDoor.open ? Math.PI / 2 : 0;
+      if (nearDoor.open) {
+        audio.doorCreak(true);
+        if (nearDoor.collider) {
+          nearDoor.collider.hx = 0;
+          nearDoor.collider.hz = 0;
+        }
+      } else {
+        audio.doorCreak(false);
+      }
       return;
     }
     const dossier = world.nearestDossier(point);
@@ -631,6 +846,42 @@ export async function createGameScene(engine: Engine, canvas: HTMLCanvasElement)
     } else {
       audio.cue(170, 0.1, 0.04);
     }
+  };
+
+  const crankDynamo = () => {
+    if (world.phase !== "playing") return;
+    if (world.battery >= 100) {
+      world.say("Dynamo capacitor is already full.");
+      return;
+    }
+    world.crankDynamo(cameraWorld());
+    audio.dynamoCrank();
+    cameraTrauma = Math.min(cameraTrauma + 0.06, 0.25);
+  };
+
+  const throwBottle = () => {
+    if (world.phase !== "playing" || world.bottles <= 0 || world.hidden) return;
+    const forwardX = Math.sin(cam.rotation.y);
+    const forwardZ = Math.cos(cam.rotation.y);
+    if (!world.throwBottle(cameraWorld(), forwardX, forwardZ)) return;
+    const bottleMesh = MeshBuilder.CreateCylinder(`thrown-bottle-${Date.now()}`, {
+      diameterTop: 0.06,
+      diameterBottom: 0.12,
+      height: 0.32,
+      tessellation: 8,
+    }, scene);
+    bottleMesh.material = glassTranslucent;
+    const spawnPos = new Vector3(cam.position.x + forwardX * 0.4, cam.position.y - 0.1, cam.position.z + forwardZ * 0.4);
+    bottleMesh.position.copyFrom(spawnPos);
+    bottleMesh.rotation.x = Math.PI / 3;
+    bottleMesh.isPickable = false;
+
+    activeBottles.push({
+      mesh: bottleMesh,
+      pos: spawnPos,
+      vel: new Vector3(forwardX * 13, 3.8, forwardZ * 13),
+    });
+    audio.cue(240, 0.08, 0.05);
   };
 
   let prevTime = performance.now();
@@ -710,6 +961,27 @@ export async function createGameScene(engine: Engine, canvas: HTMLCanvasElement)
       demoBooted = true;
       world.start(seed); world.flashlight = true; setTorch(true); monster.reset(seed);
       cam.position.set(-17, 1.62, -14); cam.rotation.set(0, 0.2, 0);
+    }
+    if (world.phase === "deathCinematic") {
+      world.update(gameDt, cameraWorld(), false, false, false);
+      const dx = head.position.x - cam.position.x;
+      const dz = head.position.z - cam.position.z;
+      const targetYaw = Math.atan2(dx, dz);
+      cam.rotation.y += (targetYaw - cam.rotation.y) * Math.min(1, gameDt * 12);
+      cam.rotation.x += (-0.22 - cam.rotation.x) * Math.min(1, gameDt * 10);
+      cam.position.x += (Math.random() - 0.5) * 0.09;
+      cam.position.y += (Math.random() - 0.5) * 0.09;
+
+      armB.position.set(cam.position.x + dx * 0.35, cam.position.y - 0.15, cam.position.z + dz * 0.35);
+      armB.rotation.x = Math.PI / 2.1;
+
+      if (pipeline.chromaticAberration) {
+        pipeline.chromaticAberration.aberrationAmount = 90;
+      }
+      const snapshot = world.snapshot(); snapshot.room = roomAt(cam.position.x, cam.position.z);
+      ui.render(snapshot, world.items.filter(item => item.collected).length, currentSlot);
+      ui.renderTeam(onlineState?.players ?? [], roomClient.playerId);
+      return;
     }
     if (world.phase !== "playing") {
       const snapshot = world.snapshot(); snapshot.room = roomAt(cam.position.x, cam.position.z);
@@ -794,10 +1066,18 @@ export async function createGameScene(engine: Engine, canvas: HTMLCanvasElement)
 
       if (onlineState?.phase === "playing") {
         roomClient.move({ x: cam.position.x, z: cam.position.z, yaw: cam.rotation.y, moving: isMoving, sprinting, crouched });
-      } else world.update(gameDt, cameraWorld(), isMoving, sprinting);
+      } else {
+        const isHoldingBreath = world.hidden && (input.down("holdBreath") || input.down("use"));
+        world.update(gameDt, cameraWorld(), isMoving, sprinting, isHoldingBreath);
+        if (world.noiseEvents.some(e => e.kind === "gasping breath" && (now - e.at) < 50)) {
+          audio.gasp();
+        }
+      }
       if (input.justPressed("interact")) onlineState?.phase === "playing" ? roomClient.action("interact") : interact();
       if (input.justPressed("hide")) onlineState?.phase === "playing" ? roomClient.action("hide") : world.tryHide(cameraWorld());
-      if (input.justPressed("flashlight")) { if (onlineState?.phase === "playing") roomClient.action("flashlight"); else { world.toggleFlashlight(cameraWorld()); setTorch(world.flashlight); } audio.cue(260, 0.05, 0.035); }
+      if (input.justPressed("flashlight")) { if (onlineState?.phase === "playing") roomClient.action("flashlight"); else { world.toggleFlashlight(cameraWorld()); setTorch(world.flashlight); } audio.flashlightSwitch(world.flashlight); }
+      if (input.justPressed("crank")) crankDynamo();
+      if (input.justPressed("throw") && !world.hidden) throwBottle();
       if (input.justPressed("ping")) onlineState?.phase === "playing" ? roomClient.action("ping") : world.ping(cameraWorld());
       if (input.justPressed("drop")) onlineState?.phase === "playing" ? roomClient.action("drop", currentSlot) : world.dropItem(cameraWorld(), currentSlot);
       if (input.justPressed("use")) onlineState?.phase === "playing" ? roomClient.action("use", currentSlot) : world.useItem(cameraWorld(), currentSlot);
@@ -943,6 +1223,67 @@ export async function createGameScene(engine: Engine, canvas: HTMLCanvasElement)
         voice.setDistance(model.state.id, Math.hypot(p.x - model.state.x, p.z - model.state.z));
       }
 
+      // Update Doors (swinging, slam sound, and predator bashing)
+      for (const door of estateDoors) {
+        if (!door.broken) {
+          const prevAngle = door.currentAngle;
+          door.currentAngle += (door.targetAngle - door.currentAngle) * Math.min(1, gameDt * 7);
+          door.pivot.rotation.y = door.currentAngle;
+
+          if (!door.open && Math.abs(door.currentAngle - door.targetAngle) < 0.05 && Math.abs(prevAngle - door.targetAngle) >= 0.05) {
+            audio.doorSlam();
+            if (door.collider) {
+              door.collider.hx = door.isVertical ? 0.8 : 0.2;
+              door.collider.hz = door.isVertical ? 0.2 : 0.8;
+            }
+          }
+
+          const distToMonster = Math.hypot(door.pos.x - monster.x, door.pos.z - monster.z);
+          if (!door.open && (monster.mode === "chase" || monster.mode === "enraged") && distToMonster < 1.7) {
+            door.broken = true;
+            door.open = true;
+            door.mesh.setEnabled(false);
+            if (door.collider) {
+              door.collider.hx = 0;
+              door.collider.hz = 0;
+            }
+            audio.doorBash();
+            cameraTrauma = Math.max(cameraTrauma, 0.75);
+            world.say("COLE SMASHED THROUGH THE TIMBER DOOR!");
+          }
+        }
+      }
+
+      // Update Thrown Glass Bottles
+      for (let i = activeBottles.length - 1; i >= 0; i--) {
+        const bottle = activeBottles[i]!;
+        bottle.vel.y -= 18 * gameDt;
+        bottle.pos.x += bottle.vel.x * gameDt;
+        bottle.pos.y += bottle.vel.y * gameDt;
+        bottle.pos.z += bottle.vel.z * gameDt;
+        bottle.mesh.position.copyFrom(bottle.pos);
+        bottle.mesh.rotation.x += gameDt * 10;
+        bottle.mesh.rotation.z += gameDt * 7;
+
+        if (bottle.pos.y <= 0.14) {
+          audio.glassShatter();
+          world.makeNoise({ x: bottle.pos.x, z: bottle.pos.z }, 0.95, "glass shattering");
+          bottle.mesh.dispose();
+          activeBottles.splice(i, 1);
+        }
+      }
+
+      // Black Yard Lightning & Thunder
+      lightningTimer -= gameDt;
+      if (lightningTimer <= 0) {
+        lightningTimer = 14 + Math.random() * 18;
+        lightningLight.intensity = 3.6;
+        audio.thunderStrike();
+      }
+      if (lightningLight.intensity > 0) {
+        lightningLight.intensity = Math.max(0, lightningLight.intensity - gameDt * 7.5);
+      }
+
       if (world.relayPuzzleActive && Math.hypot(p.x, p.z) < 5.4) {
         ui.setPrompt(`ALIGN SIGNAL LAMP ${world.puzzlePattern[world.puzzleIndex]} · PRESS E`);
         for (let i = 0; i < 3; i++) {
@@ -997,6 +1338,7 @@ export async function createGameScene(engine: Engine, canvas: HTMLCanvasElement)
       window.removeEventListener("keydown", onDigits);
       roomClient.close(); voice.dispose(); coopUI.dispose();
       remotePlayers.forEach(model => { model.body.dispose(); model.head.dispose(); }); remotePlayers.clear();
+      for (const bottle of activeBottles) bottle.mesh.dispose(); activeBottles.length = 0;
       input.dispose(); ui.dispose(); audio.dispose();
       scene.onBeforeRenderObservable.remove(observer);
       scene.dispose();

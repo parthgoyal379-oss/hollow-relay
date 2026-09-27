@@ -390,6 +390,272 @@ export class AudioDirector {
     osc2.stop(now + 0.95);
   }
 
+  doorCreak(opening = true) {
+    if (!this.context || !this.earFilter) return;
+    const now = this.context.currentTime;
+    try {
+      const osc = this.context.createOscillator();
+      const gain = this.context.createGain();
+      const filter = this.context.createBiquadFilter();
+
+      osc.type = "sawtooth";
+      const startF = opening ? 240 : 480;
+      const endF = opening ? 520 : 200;
+      osc.frequency.setValueAtTime(startF, now);
+      osc.frequency.exponentialRampToValueAtTime(endF, now + 0.65);
+
+      filter.type = "bandpass";
+      filter.frequency.setValueAtTime(opening ? 600 : 450, now);
+      filter.Q.value = 4.5;
+
+      gain.gain.setValueAtTime(0.01, now);
+      gain.gain.linearRampToValueAtTime(0.08, now + 0.15);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.7);
+
+      osc.connect(filter).connect(gain).connect(this.earFilter);
+      osc.start(now);
+      osc.stop(now + 0.72);
+    } catch {
+      this.cue(320, 0.4, 0.05);
+    }
+  }
+
+  doorSlam() {
+    if (!this.context || !this.earFilter) return;
+    const now = this.context.currentTime;
+    try {
+      // Bass thud
+      const osc = this.context.createOscillator();
+      const gain = this.context.createGain();
+      osc.type = "sine";
+      osc.frequency.setValueAtTime(110, now);
+      osc.frequency.exponentialRampToValueAtTime(28, now + 0.35);
+      gain.gain.setValueAtTime(0.35, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.38);
+      osc.connect(gain).connect(this.earFilter);
+      osc.start(now);
+      osc.stop(now + 0.4);
+
+      // Wood impact noise slap
+      const buffer = this.context.createBuffer(1, Math.floor(this.context.sampleRate * 0.12), this.context.sampleRate);
+      const data = buffer.getChannelData(0);
+      for (let i = 0; i < data.length; i++) data[i] = (Math.random() * 2 - 1) * Math.exp(-i / (data.length * 0.2));
+      const noise = this.context.createBufferSource();
+      noise.buffer = buffer;
+      const noiseFilter = this.context.createBiquadFilter();
+      noiseFilter.type = "lowpass";
+      noiseFilter.frequency.value = 850;
+      const noiseGain = this.context.createGain();
+      noiseGain.gain.setValueAtTime(0.25, now);
+      noiseGain.gain.exponentialRampToValueAtTime(0.001, now + 0.12);
+      noise.connect(noiseFilter).connect(noiseGain).connect(this.earFilter);
+      noise.start(now);
+    } catch {
+      this.cue(80, 0.25, 0.15);
+    }
+  }
+
+  doorBash() {
+    if (!this.context || !this.earFilter) return;
+    const now = this.context.currentTime;
+    try {
+      // Violent monster door splinter
+      const osc = this.context.createOscillator();
+      const oscGain = this.context.createGain();
+      osc.type = "triangle";
+      osc.frequency.setValueAtTime(75, now);
+      osc.frequency.exponentialRampToValueAtTime(20, now + 0.5);
+      oscGain.gain.setValueAtTime(0.5, now);
+      oscGain.gain.exponentialRampToValueAtTime(0.001, now + 0.52);
+      osc.connect(oscGain).connect(this.earFilter);
+      osc.start(now);
+      osc.stop(now + 0.55);
+
+      // Splinter noise
+      const buffer = this.context.createBuffer(1, Math.floor(this.context.sampleRate * 0.35), this.context.sampleRate);
+      const data = buffer.getChannelData(0);
+      for (let i = 0; i < data.length; i++) data[i] = (Math.random() * 2 - 1) * Math.exp(-i / (data.length * 0.25));
+      const noise = this.context.createBufferSource();
+      noise.buffer = buffer;
+      const nFilter = this.context.createBiquadFilter();
+      nFilter.type = "bandpass";
+      nFilter.frequency.value = 1450;
+      nFilter.Q.value = 2.0;
+      const nGain = this.context.createGain();
+      nGain.gain.setValueAtTime(0.42, now);
+      nGain.gain.exponentialRampToValueAtTime(0.001, now + 0.35);
+      noise.connect(nFilter).connect(nGain).connect(this.earFilter);
+      noise.start(now);
+    } catch {
+      this.cue(60, 0.45, 0.25);
+    }
+  }
+
+  glassShatter() {
+    if (!this.context || !this.earFilter) return;
+    const now = this.context.currentTime;
+    try {
+      // Noise burst for glass explosion
+      const buffer = this.context.createBuffer(1, Math.floor(this.context.sampleRate * 0.45), this.context.sampleRate);
+      const data = buffer.getChannelData(0);
+      for (let i = 0; i < data.length; i++) data[i] = (Math.random() * 2 - 1) * Math.exp(-i / (data.length * 0.18));
+      const noise = this.context.createBufferSource();
+      noise.buffer = buffer;
+      const hp = this.context.createBiquadFilter();
+      hp.type = "highpass";
+      hp.frequency.value = 1800;
+      const nGain = this.context.createGain();
+      nGain.gain.setValueAtTime(0.4, now);
+      nGain.gain.exponentialRampToValueAtTime(0.001, now + 0.42);
+      noise.connect(hp).connect(nGain).connect(this.earFilter);
+      noise.start(now);
+
+      // Shard tinkles
+      const freqs = [2400, 3100, 3900, 4800, 5600];
+      freqs.forEach((freq, idx) => {
+        const osc = this.context!.createOscillator();
+        const g = this.context!.createGain();
+        osc.type = "sine";
+        osc.frequency.value = freq + (Math.random() - 0.5) * 200;
+        const delay = idx * 0.045;
+        g.gain.setValueAtTime(0.0001, now + delay);
+        g.gain.linearRampToValueAtTime(0.12, now + delay + 0.01);
+        g.gain.exponentialRampToValueAtTime(0.001, now + delay + 0.22);
+        osc.connect(g).connect(this.earFilter!);
+        osc.start(now + delay);
+        osc.stop(now + delay + 0.25);
+      });
+    } catch {
+      this.cue(2400, 0.35, 0.15);
+    }
+  }
+
+  dynamoCrank() {
+    if (!this.context || !this.earFilter) return;
+    const now = this.context.currentTime;
+    try {
+      // 3 rapid mechanical gear ratchet clicks
+      for (let i = 0; i < 3; i++) {
+        const osc = this.context.createOscillator();
+        const gain = this.context.createGain();
+        const t = now + i * 0.07;
+        osc.type = "sawtooth";
+        osc.frequency.setValueAtTime(950 + i * 180, t);
+        osc.frequency.exponentialRampToValueAtTime(320, t + 0.05);
+        gain.gain.setValueAtTime(0.14, t);
+        gain.gain.exponentialRampToValueAtTime(0.001, t + 0.055);
+        osc.connect(gain).connect(this.earFilter);
+        osc.start(t);
+        osc.stop(t + 0.06);
+      }
+    } catch {
+      this.cue(800, 0.15, 0.08);
+    }
+  }
+
+  gasp() {
+    if (!this.context || !this.earFilter) return;
+    const now = this.context.currentTime;
+    try {
+      const buffer = this.context.createBuffer(1, Math.floor(this.context.sampleRate * 0.38), this.context.sampleRate);
+      const data = buffer.getChannelData(0);
+      for (let i = 0; i < data.length; i++) data[i] = (Math.random() * 2 - 1) * (i / data.length); // Rising inhalation
+      const noise = this.context.createBufferSource();
+      noise.buffer = buffer;
+      const bp = this.context.createBiquadFilter();
+      bp.type = "bandpass";
+      bp.frequency.setValueAtTime(450, now);
+      bp.frequency.exponentialRampToValueAtTime(1100, now + 0.35);
+      bp.Q.value = 2.2;
+      const gain = this.context.createGain();
+      gain.gain.setValueAtTime(0.01, now);
+      gain.gain.linearRampToValueAtTime(0.24, now + 0.28);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.38);
+      noise.connect(bp).connect(gain).connect(this.earFilter);
+      noise.start(now);
+    } catch {
+      this.cue(600, 0.3, 0.08);
+    }
+  }
+
+  jumpscareDeath() {
+    if (!this.context || !this.earFilter) return;
+    const now = this.context.currentTime;
+    try {
+      // Sub-bass crater drop
+      const sub = this.context.createOscillator();
+      const subGain = this.context.createGain();
+      sub.type = "sine";
+      sub.frequency.setValueAtTime(80, now);
+      sub.frequency.exponentialRampToValueAtTime(24, now + 1.2);
+      subGain.gain.setValueAtTime(0.65, now);
+      subGain.gain.exponentialRampToValueAtTime(0.001, now + 1.25);
+      sub.connect(subGain).connect(this.master!);
+      sub.start(now);
+      sub.stop(now + 1.3);
+
+      // Horrific FM screamer
+      const carrier = this.context.createOscillator();
+      const modulator = this.context.createOscillator();
+      const modGain = this.context.createGain();
+      const screamerGain = this.context.createGain();
+
+      carrier.type = "sawtooth";
+      carrier.frequency.setValueAtTime(1250, now);
+      carrier.frequency.exponentialRampToValueAtTime(320, now + 0.85);
+
+      modulator.type = "square";
+      modulator.frequency.value = 160;
+      modGain.gain.value = 850;
+
+      screamerGain.gain.setValueAtTime(0.45, now);
+      screamerGain.gain.exponentialRampToValueAtTime(0.001, now + 0.95);
+
+      modulator.connect(modGain);
+      modGain.connect(carrier.frequency);
+      carrier.connect(screamerGain).connect(this.master!);
+
+      carrier.start(now);
+      modulator.start(now);
+      carrier.stop(now + 1.0);
+      modulator.stop(now + 1.0);
+
+      // Bio-acoustic cardiac flatline after jumpscare
+      const flatline = this.context.createOscillator();
+      const flatlineGain = this.context.createGain();
+      flatline.type = "sine";
+      flatline.frequency.value = 1040;
+      flatlineGain.gain.setValueAtTime(0.0001, now + 0.7);
+      flatlineGain.gain.linearRampToValueAtTime(0.08, now + 1.0);
+      flatlineGain.gain.linearRampToValueAtTime(0.08, now + 2.5);
+      flatlineGain.gain.exponentialRampToValueAtTime(0.001, now + 3.2);
+      flatline.connect(flatlineGain).connect(this.master!);
+      flatline.start(now + 0.7);
+      flatline.stop(now + 3.3);
+    } catch {
+      this.cue(80, 0.8, 0.35);
+    }
+  }
+
+  thunderStrike() {
+    if (!this.context || !this.earFilter) return;
+    const now = this.context.currentTime;
+    try {
+      const osc = this.context.createOscillator();
+      const gain = this.context.createGain();
+      osc.type = "triangle";
+      osc.frequency.setValueAtTime(65, now);
+      osc.frequency.exponentialRampToValueAtTime(26, now + 2.4);
+      gain.gain.setValueAtTime(0.38, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 2.5);
+      osc.connect(gain).connect(this.earFilter);
+      osc.start(now);
+      osc.stop(now + 2.6);
+    } catch {
+      this.cue(55, 0.6, 0.15);
+    }
+  }
+
   update(
     dt: number,
     mode: string,

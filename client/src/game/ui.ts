@@ -55,6 +55,13 @@ export class GameUI {
     this.root.dataset.phase = "title";
     this.root.innerHTML = `
       <div class="game-vignette"></div>
+      <div id="hiding-vignette" class="hiding-vignette">
+        <div class="hiding-slats"></div>
+        <div id="breath-prompt" class="breath-prompt">
+          <strong id="breath-title">HOLD BREATH [SPACE / RMB]</strong>
+          <div class="breath-meter"><i id="breath-meter-fill" style="width: 100%;"></i></div>
+        </div>
+      </div>
       <header class="hud-top">
         <div class="brand-lockup"><span class="brand-mark">◉</span><div><strong>THE HOLLOW RELAY</strong><small>BLACKWATER ESTATE · 1947</small></div></div>
         <div class="objective-card"><span class="eyebrow">MISSION OBJECTIVE</span><strong id="objective">Find the relay components</strong><div class="objective-progress"><i id="progress-fill"></i></div></div>
@@ -98,6 +105,10 @@ export class GameUI {
           <div class="noise-row"><i id="noise-lamp"></i><span id="noise-label">QUIET</span><span class="flash-label" id="flash-label">LIGHT OFF</span></div>
           <i id="health-bar" style="display:none"></i><b id="health-val" style="display:none">100</b>
         </div>
+        <div class="survival-toolbar">
+          <div class="tool-chip"><kbd>T / RMB</kbd> BOTTLES: <strong id="bottle-count">3</strong></div>
+          <div class="tool-chip"><kbd>R</kbd> <strong>DYNAMO</strong></div>
+        </div>
         <div class="inventory" id="inventory"></div>
         <div class="threat-indicator"><span class="threat-eye" id="threat-eye">◉</span><div><b id="threat-label">THE HOUSE IS LISTENING</b><small>Keep your steps low</small></div></div>
       </div>
@@ -112,6 +123,12 @@ export class GameUI {
           <button class="mobile-button" data-click="ping">PING</button>
         </div>
       </div>
+
+      <!-- DEATH JUMPSCARE CINEMATIC OVERLAY -->
+      <section id="death-cinematic-screen" class="death-cinematic-screen hidden-screen">
+        <div class="death-stamp">SIGNAL TERMINATED</div>
+        <p class="death-reason" id="death-reason">BIO-ACOUSTIC RESONANCE COLLAPSE // CHIEF ENGINEER COLE HARVESTED YOUR FREQUENCY</p>
+      </section>
 
       <!-- RESIDENT EVIL DOSSIER INSPECTOR -->
       <section id="dossier-viewer" class="phase-screen dossier-modal hidden-screen">
@@ -741,6 +758,7 @@ export class GameUI {
       if (phase === "paused") this.showOnly("pause-screen");
       if (phase === "results") this.showOnly("results-screen");
       if (phase === "title") this.showOnly("title-screen");
+      if (phase === "deathCinematic") this.showOnly("death-cinematic-screen");
     }
 
     const $ = <T extends HTMLElement>(selector: string) => this.root.querySelector<T>(selector);
@@ -753,6 +771,23 @@ export class GameUI {
       vignette.classList.toggle("stealth-hidden", snapshot.hidden && phase === "playing");
       vignette.classList.toggle("health-critical", snapshot.health < 35 && phase === "playing");
     }
+
+    // Wardrobe & Under-table Hiding Slats Overlay
+    const hidingVignette = $("#hiding-vignette");
+    if (hidingVignette) {
+      hidingVignette.classList.toggle("active", snapshot.hidden && phase === "playing");
+      const breathPrompt = $("#breath-prompt");
+      const breathTitle = $("#breath-title");
+      const breathFill = $("#breath-meter-fill");
+      if (breathPrompt && breathTitle && breathFill) {
+        breathPrompt.classList.toggle("holding", snapshot.holdingBreath);
+        breathTitle.textContent = snapshot.holdingBreath ? "HOLDING BREATH... [SILENT]" : "HOLD BREATH [SPACE / RMB]";
+        breathFill.style.width = `${snapshot.stamina}%`;
+      }
+    }
+
+    const bottleCount = $("#bottle-count");
+    if (bottleCount) bottleCount.textContent = snapshot.bottles.toString();
 
     // Dossier inspector synchronization
     if (snapshot.activeDossier && phase === "playing") {
