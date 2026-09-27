@@ -1,7 +1,7 @@
 import type { Action, InputController } from "./input";
 import type { HudSnapshot } from "./types";
 import type { OnlinePlayerState } from "./net";
-import { evaluateEscape, LORE_DOCUMENTS, type LoreDocument } from "./story";
+import { evaluateEscape, LORE_DOCUMENTS, type LoreDocument, ITEM_EXAMINE_DATA } from "./story";
 
 export interface UiCallbacks {
   onLobby: () => void;
@@ -42,6 +42,13 @@ export class GameUI {
   private lastInventory: HudSnapshot["inventory"] = [];
   private readDossierIds = new Set<string>();
 
+  private ecgCanvas: HTMLCanvasElement | null = null;
+  private ecgCtx: CanvasRenderingContext2D | null = null;
+  private ecgHistory: number[] = new Array(130).fill(14);
+  private ecgPhase = 0;
+  private ecgLastTime = performance.now();
+  private examiningItem: HudSnapshot["inventory"][0] | null = null;
+
   constructor(private readonly input: InputController, callbacks: UiCallbacks) {
     this.callbacks = callbacks;
     this.root.id = "hollow-ui";
@@ -51,6 +58,11 @@ export class GameUI {
       <header class="hud-top">
         <div class="brand-lockup"><span class="brand-mark">◉</span><div><strong>THE HOLLOW RELAY</strong><small>BLACKWATER ESTATE · 1947</small></div></div>
         <div class="objective-card"><span class="eyebrow">MISSION OBJECTIVE</span><strong id="objective">Find the relay components</strong><div class="objective-progress"><i id="progress-fill"></i></div></div>
+        <div class="frequency-card" id="frequency-card">
+          <div class="freq-header"><small>CARRIER TUNER</small><strong>734.2 kHz</strong></div>
+          <div class="freq-meter" id="freq-meter"><i id="freq-needle" style="left: 10%;"></i></div>
+          <span class="freq-label" id="freq-label">STATIC // NO RESONANCE</span>
+        </div>
         <button class="dossier-card" data-click="dossier-archive" aria-label="Open Classified Dossiers"><small>CLASSIFIED DOSSIERS</small><strong id="dossier-count">0 / 5</strong><span class="dossier-badge-sub">VIEW ARCHIVE [TAB]</span></button>
         <div class="timer-card"><small>UNTIL DAWN</small><strong id="timer">12:00</strong><span id="phase-label">SIGNAL LOST</span></div>
         <button class="pause-button" data-click="pause" aria-label="Pause">Ⅱ</button>
@@ -63,10 +75,28 @@ export class GameUI {
       <div id="relay-panel" class="relay-panel"><small>RELAY REFERENCE · ALIGN IN ORDER</small><strong id="relay-code"></strong><div class="relay-switches"><button data-switch="1" aria-label="Align lamp 1">1</button><button data-switch="2" aria-label="Align lamp 2">2</button><button data-switch="3" aria-label="Align lamp 3">3</button></div><span id="relay-progress"></span></div>
       <div id="center-reticle" class="reticle">+</div>
       <div class="hud-bottom">
-        <div class="vitals">
+        <div class="vitals-monitor">
+          <div class="ecg-row">
+            <canvas id="ecg-canvas" class="ecg-canvas" width="130" height="28"></canvas>
+            <div class="ecg-status-block">
+              <span id="ecg-badge" class="ecg-badge fine">FINE</span>
+              <span id="ecg-bpm" class="ecg-bpm">68 BPM</span>
+            </div>
+          </div>
           <div class="vital-row"><span>BREATH</span><div class="meter"><i id="stamina-bar"></i></div><b id="stamina-val">100</b></div>
-          <div class="vital-row"><span>INJURY</span><div class="meter injury"><i id="health-bar"></i></div><b id="health-val">100</b></div>
+          <div class="battery-gauge">
+            <span style="font-size:7px; letter-spacing:0.12em; color:#8f887b;">LAMP</span>
+            <div class="battery-cells" id="battery-cells">
+              <span class="b-cell active"></span>
+              <span class="b-cell active"></span>
+              <span class="b-cell active"></span>
+              <span class="b-cell active"></span>
+              <span class="b-cell active"></span>
+            </div>
+            <span class="battery-pct" id="battery-pct">100%</span>
+          </div>
           <div class="noise-row"><i id="noise-lamp"></i><span id="noise-label">QUIET</span><span class="flash-label" id="flash-label">LIGHT OFF</span></div>
+          <i id="health-bar" style="display:none"></i><b id="health-val" style="display:none">100</b>
         </div>
         <div class="inventory" id="inventory"></div>
         <div class="threat-indicator"><span class="threat-eye" id="threat-eye">◉</span><div><b id="threat-label">THE HOUSE IS LISTENING</b><small>Keep your steps low</small></div></div>
@@ -112,6 +142,31 @@ export class GameUI {
           <p class="title-copy">Classified documents, medical logs, and telegraph transmissions uncovered within the estate.</p>
           <div class="dossier-list" id="dossier-archive-list"></div>
           <button class="primary-button" data-click="close-archive">RETURN TO SEARCH <span>↗</span></button>
+        </div>
+      </section>
+
+      <!-- RESIDENT EVIL ITEM EXAMINE MODAL -->
+      <section id="item-examine-modal" class="item-modal hidden-screen">
+        <div class="item-examine-card">
+          <div class="item-examine-header">
+            <div class="item-exam-specs">
+              <span id="exam-category">RELAY COMPONENT</span>
+              <span id="exam-ref">ONR-SPEC-47-B</span>
+              <span id="exam-weight">0.45 KG</span>
+            </div>
+            <h2 id="exam-title">Silver Vacuum Tube</h2>
+          </div>
+          <div class="item-exam-visual">
+            <div class="item-exam-glyph" id="exam-glyph">⌁</div>
+            <div class="item-exam-schematic" id="exam-schematic">SCHEMATIC // SPEC-47</div>
+          </div>
+          <div class="item-exam-description" id="exam-desc"></div>
+          <div class="item-exam-protocol" id="exam-protocol"></div>
+          <div class="item-exam-actions">
+            <button class="primary-button" data-click="examine-use" id="exam-use-btn">USE [SPACE]</button>
+            <button class="text-button" data-click="examine-drop" id="exam-drop-btn">DROP [Q]</button>
+            <button class="text-button" data-click="close-examine">RETURN [ESC]</button>
+          </div>
         </div>
       </section>
 
@@ -207,6 +262,10 @@ export class GameUI {
       </section>
     `;
     document.body.appendChild(this.root);
+    this.ecgCanvas = this.root.querySelector<HTMLCanvasElement>("#ecg-canvas");
+    if (this.ecgCanvas) {
+      this.ecgCtx = this.ecgCanvas.getContext("2d");
+    }
     this.bind();
     this.renderInventory([]);
   }
@@ -227,6 +286,17 @@ export class GameUI {
       else if (action === "ping") this.callbacks.onPing();
       else if (action === "drop") this.callbacks.onDrop();
       else if (action === "use") this.callbacks.onUse();
+      else if (action === "examine-use") {
+        this.callbacks.onUse();
+        this.closeExamine();
+      }
+      else if (action === "examine-drop") {
+        this.callbacks.onDrop();
+        this.closeExamine();
+      }
+      else if (action === "close-examine") {
+        this.closeExamine();
+      }
       else if (action === "pause") this.callbacks.onPause();
       else if (action === "resume") { this.callbacks.onPause(); }
       else if (action === "help") { this.helpOpen = true; this.showOnly("help-screen"); }
@@ -271,6 +341,10 @@ export class GameUI {
       document.querySelectorAll(".inventory-slot").forEach(el => el.classList.remove("selected"));
       target.classList.add("selected");
       this.callbacks.onSwitch(this.inventoryIndex);
+      const clickedItem = this.lastInventory[this.inventoryIndex];
+      if (clickedItem && this.currentPhase === "playing") {
+        this.examineItem(clickedItem);
+      }
     };
     const relaySwitch = (event: Event) => {
       const target = (event.target as HTMLElement).closest<HTMLElement>("[data-switch]");
@@ -291,6 +365,28 @@ export class GameUI {
           this.showOnly("");
         }
         return;
+      }
+      if (event.code === "Escape") {
+        const examineModal = this.root.querySelector<HTMLElement>("#item-examine-modal");
+        if (examineModal && !examineModal.classList.contains("hidden-screen")) {
+          event.preventDefault();
+          this.closeExamine();
+          return;
+        }
+      }
+      if (this.examiningItem) {
+        if (event.code === "Space") {
+          event.preventDefault();
+          this.callbacks.onUse();
+          this.closeExamine();
+          return;
+        }
+        if (event.code === "KeyQ") {
+          event.preventDefault();
+          this.callbacks.onDrop();
+          this.closeExamine();
+          return;
+        }
       }
       if (event.code === "Escape" || event.code === "KeyE") {
         const viewer = this.root.querySelector<HTMLElement>("#dossier-viewer");
@@ -325,6 +421,14 @@ export class GameUI {
     };
     viewer?.addEventListener("click", viewerClick);
 
+    const examineModal = this.root.querySelector<HTMLElement>("#item-examine-modal");
+    const examineClick = (event: MouseEvent) => {
+      if (event.target === examineModal) {
+        this.closeExamine();
+      }
+    };
+    examineModal?.addEventListener("click", examineClick);
+
     this.root.addEventListener("click", click);
     this.root.addEventListener("click", docClick);
     this.root.addEventListener("pointerdown", down);
@@ -335,6 +439,7 @@ export class GameUI {
     window.addEventListener("keydown", keyHandler);
     this.cleanup.push(
       () => viewer?.removeEventListener("click", viewerClick),
+      () => examineModal?.removeEventListener("click", examineClick),
       () => this.root.removeEventListener("click", click),
       () => this.root.removeEventListener("click", docClick),
       () => this.root.removeEventListener("pointerdown", down),
@@ -398,6 +503,145 @@ export class GameUI {
     const viewer = this.root.querySelector<HTMLElement>("#dossier-viewer");
     viewer?.classList.add("hidden-screen");
     this.previewDossier = null;
+    const examineModal = this.root.querySelector<HTMLElement>("#item-examine-modal");
+    examineModal?.classList.add("hidden-screen");
+    this.examiningItem = null;
+  }
+
+  examineItem(item: NonNullable<HudSnapshot["inventory"][0]>) {
+    this.examiningItem = item;
+    const modal = this.root.querySelector<HTMLElement>("#item-examine-modal");
+    if (!modal) return;
+
+    const data = ITEM_EXAMINE_DATA[item.id];
+    const cat = modal.querySelector<HTMLElement>("#exam-category");
+    const ref = modal.querySelector<HTMLElement>("#exam-ref");
+    const weight = modal.querySelector<HTMLElement>("#exam-weight");
+    const title = modal.querySelector<HTMLElement>("#exam-title");
+    const glyph = modal.querySelector<HTMLElement>("#exam-glyph");
+    const schematic = modal.querySelector<HTMLElement>("#exam-schematic");
+    const desc = modal.querySelector<HTMLElement>("#exam-desc");
+    const protocol = modal.querySelector<HTMLElement>("#exam-protocol");
+
+    const glyphMap: Record<string, string> = {
+      fuse: "⌁", spool: "◉", valve: "⊗", gateKey: "⚿", fuelCell: "▰", medkit: "+", battery: "▣", noiseMaker: "◌"
+    };
+
+    if (cat) cat.textContent = data?.category || "SURVIVAL GEAR";
+    if (ref) ref.textContent = data?.militaryRef || "ITEM-SPEC-1947";
+    if (weight) weight.textContent = data?.weight || "0.50 KG";
+    if (title) title.textContent = data?.name || item.name;
+    if (glyph) glyph.textContent = glyphMap[item.id] || "◉";
+    if (schematic) schematic.textContent = `SCHEMATIC // ${data?.militaryRef || item.id.toUpperCase()}`;
+    if (desc) desc.textContent = data?.description || item.name;
+    if (protocol) protocol.innerHTML = `<strong>OPERATIONAL PROTOCOL:</strong> ${this.escapeText(data?.protocol || "Can be utilized or combined.")}`;
+
+    modal.classList.remove("hidden-screen");
+    if (document.pointerLockElement) {
+      document.exitPointerLock?.();
+    }
+  }
+
+  closeExamine() {
+    this.examiningItem = null;
+    const modal = this.root.querySelector<HTMLElement>("#item-examine-modal");
+    modal?.classList.add("hidden-screen");
+    if (this.currentPhase === "playing") {
+      this.input.requestLock();
+    }
+  }
+
+  private renderEcg(health: number) {
+    if (!this.ecgCanvas || !this.ecgCtx) return;
+    const now = performance.now();
+    const dt = Math.min(0.05, (now - this.ecgLastTime) / 1000);
+    this.ecgLastTime = now;
+
+    let bpm = 68;
+    let badgeText = "FINE";
+    let badgeClass = "fine";
+    let color = "#52c468";
+
+    if (health <= 25) {
+      bpm = 156;
+      badgeText = "DANGER";
+      badgeClass = "danger";
+      color = "#e23b2b";
+    } else if (health <= 60) {
+      bpm = 104;
+      badgeText = "CAUTION";
+      badgeClass = "caution";
+      color = "#f0b832";
+    }
+
+    const badge = this.root.querySelector<HTMLElement>("#ecg-badge");
+    if (badge) {
+      badge.textContent = badgeText;
+      badge.className = `ecg-badge ${badgeClass}`;
+    }
+    const bpmEl = this.root.querySelector<HTMLElement>("#ecg-bpm");
+    if (bpmEl) bpmEl.textContent = `${bpm} BPM`;
+
+    const bps = bpm / 60;
+    this.ecgPhase = (this.ecgPhase + dt * bps) % 1;
+    const p = this.ecgPhase;
+
+    let y = 14;
+    if (p >= 0.15 && p <= 0.23) {
+      const sub = (p - 0.15) / 0.08;
+      y -= Math.sin(sub * Math.PI) * 2.8;
+    } else if (p >= 0.29 && p < 0.32) {
+      const sub = (p - 0.29) / 0.03;
+      y += Math.sin(sub * Math.PI) * 2.5;
+    } else if (p >= 0.32 && p <= 0.37) {
+      const sub = (p - 0.32) / 0.05;
+      y -= Math.sin(sub * Math.PI) * 11.5;
+    } else if (p > 0.37 && p <= 0.41) {
+      const sub = (p - 0.37) / 0.04;
+      y += Math.sin(sub * Math.PI) * 5.0;
+    } else if (p >= 0.52 && p <= 0.68) {
+      const sub = (p - 0.52) / 0.16;
+      y -= Math.sin(sub * Math.PI) * 4.2;
+    } else {
+      y += (Math.random() - 0.5) * 0.8;
+    }
+
+    this.ecgHistory.shift();
+    this.ecgHistory.push(y);
+
+    const ctx = this.ecgCtx;
+    ctx.clearRect(0, 0, 130, 28);
+
+    ctx.strokeStyle = "rgba(70, 120, 80, 0.15)";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(0, 7); ctx.lineTo(130, 7);
+    ctx.moveTo(0, 14); ctx.lineTo(130, 14);
+    ctx.moveTo(0, 21); ctx.lineTo(130, 21);
+    for (let x = 0; x < 130; x += 16) {
+      ctx.moveTo(x, 0); ctx.lineTo(x, 28);
+    }
+    ctx.stroke();
+
+    ctx.save();
+    ctx.shadowColor = color;
+    ctx.shadowBlur = 6;
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 1.6;
+    ctx.beginPath();
+    for (let i = 0; i < this.ecgHistory.length; i++) {
+      const hx = i;
+      const hy = this.ecgHistory[i];
+      if (i === 0) ctx.moveTo(hx, hy);
+      else ctx.lineTo(hx, hy);
+    }
+    ctx.stroke();
+
+    ctx.fillStyle = "#ffffff";
+    ctx.beginPath();
+    ctx.arc(129, this.ecgHistory[129], 1.8, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
   }
 
   showDossier(doc: LoreDocument) {
@@ -542,6 +786,44 @@ export class GameUI {
     const criticalAt = snapshot.demo ? 8 : 60;
     const finalAt = snapshot.demo ? 24 : 180;
     const phaseLabel = $("#phase-label"); if (phaseLabel) phaseLabel.textContent = snapshot.remaining < criticalAt ? "CRITICAL" : snapshot.remaining < finalAt ? "FINAL PHASE" : "SIGNAL LOST";
+
+    if (phase === "playing") {
+      this.renderEcg(snapshot.health);
+
+      // 734.2 kHz Radio Frequency Meter
+      const dist = snapshot.monsterDistance;
+      const proximityRatio = Math.max(0, Math.min(1, (22 - dist) / 20));
+      const isSpike = proximityRatio > 0.6 || snapshot.monsterMode === "chase" || snapshot.monsterMode === "enraged";
+      const jitter = isSpike ? (Math.random() - 0.5) * 14 : (Math.random() - 0.5) * 2;
+      const needlePct = Math.max(5, Math.min(95, 10 + proximityRatio * 78 + jitter));
+
+      const freqMeter = $("#freq-meter");
+      const freqNeedle = $("#freq-needle");
+      const freqLabel = $("#freq-label");
+      if (freqNeedle) freqNeedle.style.left = `${needlePct}%`;
+      if (freqMeter) freqMeter.classList.toggle("spike", isSpike);
+      if (freqLabel) {
+        freqLabel.classList.toggle("alert", isSpike);
+        if (isSpike) {
+          freqLabel.textContent = "734.2 kHz CARRIER LOCK — ACOUSTIC SPIKE";
+        } else if (proximityRatio > 0.2) {
+          freqLabel.textContent = "SIGNAL HARMONIC DETECTED";
+        } else {
+          freqLabel.textContent = "STATIC // NO RESONANCE";
+        }
+      }
+
+      // Flashlight Battery Cells Gauge
+      const batteryCells = this.root.querySelectorAll<HTMLElement>("#battery-cells .b-cell");
+      const activeCellCount = Math.round((snapshot.battery / 100) * batteryCells.length);
+      batteryCells.forEach((cell, idx) => {
+        cell.classList.toggle("active", idx < activeCellCount);
+        cell.classList.toggle("danger", snapshot.battery <= 20);
+      });
+      const battPct = $("#battery-pct");
+      if (battPct) battPct.textContent = `${Math.round(snapshot.battery)}%`;
+    }
+
     this.renderInventory(snapshot.inventory, currentSlot);
 
     if (phase === "results") {

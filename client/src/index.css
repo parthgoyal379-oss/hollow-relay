@@ -98,3 +98,52 @@
 .rank-info span{display:block;font-size:9px;color:#af9f83;letter-spacing:.15em;margin-top:2px}
 .epilogue-box{margin-top:16px;padding:14px;background:rgba(10,13,11,.7);border-left:2px solid var(--amber);font:italic 13px/1.6 'IM Fell English',serif;color:#bbb6a9}
 
+/* ========================================================
+   AAA RESIDENT EVIL ECG & VITALS MONITOR
+   ======================================================== */
+.vitals-monitor{display:flex;flex-direction:column;gap:6px;background:rgba(8,11,10,.82);border:1px solid rgba(194,149,87,.28);padding:9px 12px;backdrop-filter:blur(6px);box-shadow:inset 0 0 16px rgba(0,0,0,.6);width:238px}
+.ecg-row{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.ecg-canvas{display:block;width:130px;height:28px;background:rgba(4,7,5,.9);border:1px solid rgba(70,120,80,.25);border-radius:2px}
+.ecg-status-block{text-align:right}
+.ecg-badge{display:inline-block;padding:2px 7px;font:700 11px/1 'Barlow Condensed',sans-serif;letter-spacing:.15em;border-radius:2px}
+.ecg-badge.fine{background:rgba(30,120,50,.35);color:#52c468;border:1px solid rgba(82,196,104,.55);box-shadow:0 0 8px rgba(82,196,104,.3)}
+.ecg-badge.caution{background:rgba(180,130,20,.35);color:#f0b832;border:1px solid rgba(240,184,50,.55);box-shadow:0 0 8px rgba(240,184,50,.3)}
+.ecg-badge.danger{background:rgba(180,30,20,.45);color:#e23b2b;border:1px solid rgba(226,59,43,.65);box-shadow:0 0 12px rgba(226,59,43,.45);animation:pulse-danger .5s infinite alternate}
+@keyframes pulse-danger{from{opacity:.7}to{opacity:1;transform:scale(1.05)}}
+.ecg-bpm{display:block;font-size:7px;color:#8f958a;letter-spacing:.12em;margin-top:2px}
+
+/* Flashlight Battery Cell Gauge */
+.battery-gauge{display:flex;align-items:center;gap:6px;margin-top:3px}
+.battery-cells{display:flex;gap:3px;flex:1}
+.b-cell{height:5px;flex:1;background:rgba(120,110,95,.2);border:1px solid rgba(160,145,120,.3);transition:background .2s}
+.b-cell.active{background:#b89965;box-shadow:0 0 4px rgba(184,153,101,.4)}
+.b-cell.danger{background:#c03828;box-shadow:0 0 6px #c03828}
+.battery-pct{font-size:8px;color:#a89f8d;letter-spacing:.12em;min-width:32px;text-align:right}
+
+/* 734.2 kHz Radio Frequency Meter */
+.frequency-card{display:flex;flex-direction:column;justify-content:center;background:rgba(12,16,14,.78);border:1px solid rgba(194,149,87,.32);padding:4px 12px;min-width:145px}
+.freq-header{display:flex;justify-content:space-between;align-items:center}
+.freq-header small{font-size:7px;color:#8f887b;letter-spacing:.14em}
+.freq-header strong{font:600 13px 'Barlow Condensed',sans-serif;color:#d5caa8;letter-spacing:.12em}
+.freq-meter{position:relative;height:5px;background:rgba(30,36,32,.7);border:1px solid rgba(190,170,130,.2);margin:4px 0;overflow:hidden}
+.freq-meter i{position:absolute;top:0;bottom:0;width:4px;background:#c29557;box-shadow:0 0 6px #c29557;transition:left .08s ease-out}
+.freq-meter.spike i{background:#e23b2b;box-shadow:0 0 10px #e23b2b}
+.freq-label{font-size:7px;color:#9b8c75;letter-spacing:.12em;display:block}
+.freq-label.alert{color:#e23b2b;font-weight:600;animation:pulse-danger .4s infinite alternate}
+
+/* ========================================================
+   RESIDENT EVIL ITEM EXAMINE MODAL
+   ======================================================== */
+.item-modal{position:fixed;inset:0;z-index:50;display:flex;align-items:center;justify-content:center;background:rgba(4,6,5,.92);backdrop-filter:blur(12px);padding:24px}
+.item-examine-card{position:relative;width:min(580px,94vw);max-height:88vh;overflow-y:auto;background:linear-gradient(145deg,rgba(22,26,23,.98),rgba(12,15,13,.99));border:1px solid rgba(194,149,87,.45);box-shadow:0 25px 90px rgba(0,0,0,.95),inset 0 0 60px rgba(0,0,0,.5);padding:clamp(24px,5vw,42px);font-family:'IBM Plex Mono',monospace}
+.item-examine-header{border-bottom:1px solid rgba(194,149,87,.25);padding-bottom:14px;margin-bottom:18px}
+.item-examine-header h2{font:600 clamp(22px,4vw,34px)/1.1 'Barlow Condensed',sans-serif;color:#e8ddc7;margin:6px 0 8px;letter-spacing:.06em}
+.item-exam-specs{display:flex;justify-content:space-between;font-size:9px;color:#9b8c75;letter-spacing:.14em}
+.item-exam-visual{display:flex;align-items:center;justify-content:center;height:120px;background:radial-gradient(circle,rgba(194,149,87,.12) 0%,rgba(6,9,8,.8) 70%);border:1px solid rgba(194,149,87,.18);margin-bottom:18px;position:relative}
+.item-exam-glyph{font:400 56px 'IM Fell English',serif;color:#c9a46a;text-shadow:0 0 25px rgba(201,164,106,.45)}
+.item-exam-schematic{position:absolute;bottom:8px;right:12px;font-size:7px;color:#786f60;letter-spacing:.15em}
+.item-exam-description{font:400 12px/1.8 'IBM Plex Mono',monospace;color:#c2bcad;margin-bottom:16px}
+.item-exam-protocol{background:rgba(180,140,70,.07);border-left:3px solid var(--amber);padding:10px 14px;font-size:10px;line-height:1.6;color:#a89f8d;margin-bottom:22px}
+.item-exam-actions{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+.item-exam-actions .primary-button{min-width:160px}
+

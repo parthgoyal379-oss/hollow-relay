@@ -11,6 +11,10 @@ import { StandardMaterial } from "@babylonjs/core/Materials/standardMaterial";
 import { Texture } from "@babylonjs/core/Materials/Textures/texture";
 import { UniversalCamera } from "@babylonjs/core/Cameras/universalCamera";
 import type { Engine } from "@babylonjs/core/Engines/engine";
+import { DefaultRenderingPipeline } from "@babylonjs/core/PostProcesses/RenderPipeline/Pipelines/defaultRenderingPipeline";
+import { GlowLayer } from "@babylonjs/core/Layers/glowLayer";
+import { ParticleSystem } from "@babylonjs/core/Particles/particleSystem";
+import { DynamicTexture } from "@babylonjs/core/Materials/Textures/dynamicTexture";
 import { assets } from "./assets";
 import { AudioDirector } from "./audio";
 import { CoopUI } from "./coopUi";
@@ -40,10 +44,10 @@ const itemColors: Record<ItemId, Color3> = {
 
 export async function createGameScene(engine: Engine, canvas: HTMLCanvasElement): Promise<GameHandle> {
   const scene = new Scene(engine);
-  scene.clearColor = new Color4(0.015, 0.02, 0.022, 1);
+  scene.clearColor = new Color4(0.012, 0.016, 0.018, 1);
   scene.fogMode = Scene.FOGMODE_EXP;
-  scene.fogDensity = 0.0125;
-  scene.fogColor = new Color3(0.06, 0.075, 0.068);
+  scene.fogDensity = 0.0135;
+  scene.fogColor = new Color3(0.05, 0.065, 0.058);
   scene.collisionsEnabled = false;
 
   const hemi = new HemisphericLight("estate-ambient", new Vector3(0, 1, 0), scene);
@@ -56,6 +60,60 @@ export async function createGameScene(engine: Engine, canvas: HTMLCanvasElement)
   cam.rotation = new Vector3(0, 0.12, 0);
   cam.speed = 0; cam.inertia = 0;
   scene.activeCamera = cam;
+
+  // AAA Cinematic Post-Processing Pipeline
+  const pipeline = new DefaultRenderingPipeline("horrorPipeline", true, scene, [cam]);
+  pipeline.bloomEnabled = true;
+  pipeline.bloomThreshold = 0.78;
+  pipeline.bloomWeight = 0.40;
+  pipeline.bloomKernel = 32;
+  pipeline.bloomScale = 0.5;
+
+  pipeline.chromaticAberrationEnabled = true;
+  pipeline.chromaticAberration.aberrationAmount = 14;
+  pipeline.chromaticAberration.radialIntensity = 1.2;
+
+  pipeline.grainEnabled = true;
+  pipeline.grain.intensity = 14;
+  pipeline.grain.animated = true;
+
+  pipeline.sharpenEnabled = true;
+  pipeline.sharpen.edgeAmount = 0.22;
+
+  const glow = new GlowLayer("glowLayer", scene, {
+    mainTextureRatio: 0.5,
+    blurKernelSize: 16,
+  });
+  glow.intensity = 0.65;
+
+  // Atmospheric Volumetric Floating Dust Particles (drifting in the flashlight cone)
+  const dustTex = new DynamicTexture("dustTexture", 32, scene, false);
+  const dustCtx = dustTex.getContext();
+  const grad = dustCtx.createRadialGradient(16, 16, 0, 16, 16, 16);
+  grad.addColorStop(0, "rgba(230, 215, 185, 0.9)");
+  grad.addColorStop(0.4, "rgba(200, 185, 160, 0.4)");
+  grad.addColorStop(1, "rgba(200, 185, 160, 0)");
+  dustCtx.fillStyle = grad;
+  dustCtx.fillRect(0, 0, 32, 32);
+  dustTex.update();
+
+  const dust = new ParticleSystem("ambientDust", 70, scene);
+  dust.particleTexture = dustTex;
+  dust.emitter = cam.position;
+  dust.minEmitBox = new Vector3(-2.8, -1.8, 0.6);
+  dust.maxEmitBox = new Vector3(2.8, 1.8, 6.5);
+  dust.color1 = new Color4(0.85, 0.82, 0.70, 0.35);
+  dust.color2 = new Color4(0.65, 0.62, 0.52, 0.18);
+  dust.colorDead = new Color4(0, 0, 0, 0);
+  dust.minSize = 0.015;
+  dust.maxSize = 0.045;
+  dust.minLifeTime = 3.5;
+  dust.maxLifeTime = 7.0;
+  dust.emitRate = 18;
+  dust.gravity = new Vector3(0, -0.006, 0);
+  dust.direction1 = new Vector3(-0.015, -0.015, 0.04);
+  dust.direction2 = new Vector3(0.015, 0.015, 0.08);
+  dust.start();
 
   const wallMaterial = new StandardMaterial("damp-lime-plaster", scene);
   const wallTexture = new Texture(assets.plaster, scene, false, false, Texture.TRILINEAR_SAMPLINGMODE);
@@ -243,9 +301,29 @@ export async function createGameScene(engine: Engine, canvas: HTMLCanvasElement)
   const torchFill = new PointLight("torch-fill", new Vector3(0.12, -0.12, 0.35), scene);
   torchFill.parent = cam; torchFill.range = 16; torchFill.intensity = 0.92; torchFill.diffuse = new Color3(0.95, 0.88, 0.74); torchFill.setEnabled(false);
 
+  // Volumetric Flashlight Beam Cone
+  const beamCone = MeshBuilder.CreateCylinder("torch-beam-cone", {
+    diameterTop: 0.12,
+    diameterBottom: 4.6,
+    height: 16,
+    tessellation: 16,
+  }, scene);
+  beamCone.parent = cam;
+  beamCone.position = new Vector3(0.18, -0.15, 8.2);
+  beamCone.rotation.x = Math.PI / 2;
+  const beamMat = new StandardMaterial("beam-mat", scene);
+  beamMat.diffuseColor = new Color3(0, 0, 0);
+  beamMat.emissiveColor = new Color3(0.95, 0.88, 0.72).scale(0.045);
+  beamMat.alpha = 0.055;
+  beamMat.backFaceCulling = false;
+  beamCone.material = beamMat;
+  beamCone.isPickable = false;
+  beamCone.setEnabled(false);
+
   const setTorch = (enabled: boolean) => {
     flashlight.setEnabled(enabled);
     torchFill.setEnabled(enabled);
+    beamCone.setEnabled(enabled);
   };
 
   const dossierMat = makeMat(scene, "classified-dossier-paper", new Color3(0.72, 0.64, 0.45), new Color3(0.25, 0.2, 0.12));
@@ -271,15 +349,37 @@ export async function createGameScene(engine: Engine, canvas: HTMLCanvasElement)
   const world = new GameWorld(new URLSearchParams(location.search).has("demo"));
   const audio = new AudioDirector();
   const seed = world.demo ? 4242 : Math.floor(Math.random() * 900000);
+  let cameraTrauma = 0;
+  let headBobTimer = 0;
+  let breatheTimer = 0;
+  let handSwayX = 0;
+  let handSwayY = 0;
+  let lookDeltaX = 0;
+  let lookDeltaY = 0;
+  let lastRecordedHealth = 100;
+
   const monster = new ListenerAI({
-    onAttack: () => { if (!world.demo) world.monsterHit(); },
-    onMode: mode => world.setMonsterMode(mode),
+    onAttack: () => {
+      if (!world.demo) {
+        world.monsterHit();
+        cameraTrauma = 1.0;
+        audio.cue(44, 0.45, 0.28);
+      }
+    },
+    onMode: mode => {
+      world.setMonsterMode(mode);
+      if (mode === "chase" || mode === "enraged") {
+        cameraTrauma = Math.max(cameraTrauma, 0.45);
+      }
+    },
     onNotice: message => { world.say(message); audio.cue(58, 0.55, 0.14); },
   }, seed);
   const input = new InputController(canvas, (dx, dy) => {
     if (world.phase === "playing") {
       cam.rotation.y += dx;
       cam.rotation.x = Math.max(-1.25, Math.min(1.25, cam.rotation.x + dy));
+      lookDeltaX += dx;
+      lookDeltaY += dy;
     }
   });
   let currentSlot = 0;
@@ -440,16 +540,59 @@ export async function createGameScene(engine: Engine, canvas: HTMLCanvasElement)
     return itemMesh;
   };
 
-  const body = MeshBuilder.CreateCapsule("listener-body", { height: 2.45, radius: 0.34, tessellation: 6, subdivisions: 1 }, scene);
-  body.material = entityMat; body.isPickable = false;
-  const head = MeshBuilder.CreateSphere("listener-head", { diameter: 0.52, segments: 7 }, scene);
-  head.material = entityMat; head.isPickable = false;
-  const eyeA = MeshBuilder.CreateSphere("listener-eye-left", { diameter: 0.08, segments: 6 }, scene);
-  const eyeB = MeshBuilder.CreateSphere("listener-eye-right", { diameter: 0.08, segments: 6 }, scene);
+  // ==========================================
+  // CHIEF ENGINEER COLE — BIO-ACOUSTIC PREDATOR
+  // ==========================================
+  const coleMat = makeMat(scene, "listener-necrotic-hide", new Color3(0.025, 0.028, 0.026), new Color3(0.018, 0.012, 0.01));
+  const boneMat = makeMat(scene, "listener-bone-carapace", new Color3(0.32, 0.28, 0.22), new Color3(0.05, 0.04, 0.03));
+  const coreMat = makeMat(scene, "listener-resonator-core", new Color3(0.55, 0.15, 0.05), new Color3(0.85, 0.22, 0.06));
+
+  const body = MeshBuilder.CreateCapsule("listener-body", { height: 2.35, radius: 0.36, tessellation: 8, subdivisions: 2 }, scene);
+  body.material = coleMat; body.isPickable = false;
+
+  const core = MeshBuilder.CreateSphere("listener-core", { diameter: 0.3, segments: 6 }, scene);
+  core.material = coreMat; core.isPickable = false;
+
+  const head = MeshBuilder.CreateSphere("listener-head", { diameter: 0.54, segments: 8 }, scene);
+  head.material = coleMat; head.isPickable = false;
+
+  const acousticDish = MeshBuilder.CreateCylinder("listener-dish", { diameterTop: 0.38, diameterBottom: 0.12, height: 0.16, tessellation: 10 }, scene);
+  acousticDish.material = boneMat; acousticDish.rotation.z = Math.PI / 2.8; acousticDish.isPickable = false;
+
+  const eyeA = MeshBuilder.CreateSphere("listener-eye-left", { diameter: 0.09, segments: 6 }, scene);
+  const eyeB = MeshBuilder.CreateSphere("listener-eye-right", { diameter: 0.09, segments: 6 }, scene);
   eyeA.material = eyeMat; eyeB.material = eyeMat; eyeA.isPickable = eyeB.isPickable = false;
-  const armA = MeshBuilder.CreateCylinder("listener-arm-left", { diameterTop: 0.12, diameterBottom: 0.2, height: 1.3, tessellation: 5 }, scene);
-  const armB = armA.clone("listener-arm-right")!;
-  armA.material = entityMat; armB.material = entityMat; armA.isPickable = armB.isPickable = false;
+
+  const armA = MeshBuilder.CreateCylinder("listener-arm-left", { diameterTop: 0.12, diameterBottom: 0.18, height: 1.35, tessellation: 6 }, scene);
+  armA.material = coleMat; armA.isPickable = false;
+
+  // Mutated Harvester Claw Arm (Right Arm)
+  const armB = MeshBuilder.CreateCylinder("listener-arm-right", { diameterTop: 0.18, diameterBottom: 0.26, height: 1.5, tessellation: 6 }, scene);
+  armB.material = boneMat; armB.isPickable = false;
+
+  const spineSpikes: Mesh[] = [];
+  for (let i = 0; i < 5; i++) {
+    const spike = MeshBuilder.CreateCylinder(`listener-spine-${i}`, { diameterTop: 0.01, diameterBottom: 0.09, height: 0.32 + (2 - Math.abs(i - 2)) * 0.08, tessellation: 4 }, scene);
+    spike.material = boneMat; spike.isPickable = false;
+    spineSpikes.push(spike);
+  }
+
+  const clawTalons: Mesh[] = [];
+  for (let i = 0; i < 3; i++) {
+    const talon = MeshBuilder.CreateCylinder(`listener-talon-${i}`, { diameterTop: 0.01, diameterBottom: 0.045, height: 0.28, tessellation: 4 }, scene);
+    talon.material = boneMat; talon.isPickable = false;
+    clawTalons.push(talon);
+  }
+
+  // Sonic Shockwave Floor Ring
+  const sonicWave = MeshBuilder.CreateTorus("sonic-shockwave", { diameter: 1.0, thickness: 0.08, tessellation: 24 }, scene);
+  const sonicMat = new StandardMaterial("sonic-wave-mat", scene);
+  sonicMat.emissiveColor = new Color3(0.95, 0.35, 0.08);
+  sonicMat.alpha = 0;
+  sonicWave.material = sonicMat;
+  sonicWave.position.y = 0.08;
+  sonicWave.isPickable = false;
+  let sonicPulseProgress = 1.0;
   const survivorMat = makeMat(scene, "co-op-survivor", new Color3(0.22, 0.24, 0.2), new Color3(0.12, 0.08, 0.035));
   const remotePlayers = new Map<string, { body: Mesh; head: Mesh; target: { x: number; z: number; yaw: number }; state: OnlinePlayerState }>();
 
@@ -592,8 +735,63 @@ export async function createGameScene(engine: Engine, canvas: HTMLCanvasElement)
         const nextZ = cam.position.z + dz;
         if (!blocked(cam.position.x, nextZ)) cam.position.z = nextZ;
       }
-      const targetY = crouched ? 1.0 : 1.62;
+      // First-person head bobbing & breathing
+      breatheTimer += gameDt * 1.8;
+      const breatheY = Math.sin(breatheTimer) * 0.007;
+
+      let bobY = 0;
+      let bobX = 0;
+      if (isMoving && !world.hidden) {
+        headBobTimer += gameDt * (sprinting ? 12.5 : crouched ? 5.5 : 8.0);
+        const ampY = sprinting ? 0.038 : crouched ? 0.012 : 0.022;
+        const ampX = sprinting ? 0.022 : crouched ? 0.008 : 0.014;
+        bobY = Math.sin(headBobTimer) * ampY;
+        bobX = Math.cos(headBobTimer * 0.5) * ampX;
+      } else {
+        headBobTimer = 0;
+      }
+
+      const targetY = (crouched ? 1.0 : 1.62) + bobY + breatheY;
       cam.position.y += (targetY - cam.position.y) * Math.min(1, gameDt * 8);
+
+      // Camera Roll / Strafe Banking
+      const targetRoll = move.x * -0.022;
+      cam.rotation.z += (targetRoll - cam.rotation.z) * Math.min(1, gameDt * 8);
+
+      // Dynamic Sprint FOV Kick
+      const targetFov = sprinting ? 1.16 : crouched ? 1.04 : 1.08;
+      cam.fov += (targetFov - cam.fov) * Math.min(1, gameDt * 6);
+
+      // Camera Trauma Screen Shake
+      if (world.health < lastRecordedHealth) {
+        cameraTrauma = Math.min(1.0, cameraTrauma + (lastRecordedHealth - world.health) * 0.025 + 0.45);
+        lastRecordedHealth = world.health;
+      }
+      if (cameraTrauma > 0.01) {
+        cameraTrauma *= Math.pow(0.06, gameDt);
+        cam.position.x += (Math.random() - 0.5) * cameraTrauma * 0.07;
+        cam.position.y += (Math.random() - 0.5) * cameraTrauma * 0.07;
+      }
+
+      // Hands & Flashlight Inertia / Lag
+      const targetSwayX = -lookDeltaX * 0.06;
+      const targetSwayY = -lookDeltaY * 0.06;
+      handSwayX += (targetSwayX - handSwayX) * Math.min(1, gameDt * 12);
+      handSwayY += (targetSwayY - handSwayY) * Math.min(1, gameDt * 12);
+      lookDeltaX *= Math.pow(0.01, gameDt);
+      lookDeltaY *= Math.pow(0.01, gameDt);
+
+      leftHand.position.set(-0.31 + handSwayX * 0.6 - bobX * 0.5, -0.36 + handSwayY * 0.6 + bobY * 0.6 + breatheY, 0.58);
+      rightHand.position.set(0.31 + handSwayX * 0.7 - bobX * 0.6, -0.39 + handSwayY * 0.7 + bobY * 0.7 + breatheY, 0.6);
+      heldLamp.position.set(0.2 + handSwayX * 0.8 - bobX * 0.7, -0.29 + handSwayY * 0.8 + bobY * 0.8 + breatheY, 0.49);
+
+      // Flashlight voltage flicker
+      if (world.flashlight) {
+        const distToMonster = Math.hypot(cam.position.x - monster.x, cam.position.z - monster.z);
+        const flickerChance = world.battery < 20 ? 0.16 : distToMonster < 8.5 ? 0.08 : 0.003;
+        flashlight.intensity = Math.random() < flickerChance ? 1.0 + Math.random() * 2.0 : 5.2;
+      }
+
       if (onlineState?.phase === "playing") {
         roomClient.move({ x: cam.position.x, z: cam.position.z, yaw: cam.rotation.y, moving: isMoving, sprinting, crouched });
       } else world.update(gameDt, cameraWorld(), isMoving, sprinting);
@@ -634,21 +832,106 @@ export async function createGameScene(engine: Engine, canvas: HTMLCanvasElement)
       }
       const distance = Math.hypot(p.x - monster.x, p.z - monster.z);
       world.setMonsterDistance(distance);
-      body.position.set(monster.x, 1.24 + Math.sin(now * 0.003) * 0.035, monster.z);
+
+      const enraged = monster.mode === "chase" || monster.mode === "enraged";
+      const stride = Math.sin(now * (enraged ? 0.012 : 0.0055));
+      const mBobY = Math.abs(Math.sin(now * (enraged ? 0.012 : 0.0055))) * 0.06;
+
+      // Pulse the bio-acoustic chest cavity
+      const pulseSpeed = enraged ? 0.014 : 0.006;
+      const pulse = 0.65 + Math.sin(now * pulseSpeed) * 0.35;
+      coreMat.emissiveColor = enraged ? new Color3(0.98, 0.25, 0.05).scale(pulse) : new Color3(0.75, 0.18, 0.04).scale(pulse);
+      core.scaling.set(0.9 + pulse * 0.25, 0.9 + pulse * 0.25, 0.9 + pulse * 0.25);
+
+      body.position.set(monster.x, 1.22 + mBobY, monster.z);
       body.rotation.y = monster.yaw;
-      head.position.set(monster.x + Math.sin(monster.yaw) * 0.14, 2.5, monster.z + Math.cos(monster.yaw) * 0.14);
-      eyeA.position.set(head.position.x - 0.13, 2.52, head.position.z + 0.08);
-      eyeB.position.set(head.position.x + 0.13, 2.52, head.position.z + 0.08);
-      armA.position.set(monster.x - 0.42, 1.3, monster.z); armB.position.set(monster.x + 0.42, 1.3, monster.z);
-      armA.rotation.z = 0.18; armB.rotation.z = -0.18;
+      body.rotation.x = enraged ? 0.28 : 0.12;
+
+      core.position.set(monster.x + Math.sin(monster.yaw) * 0.12, 1.38 + mBobY, monster.z + Math.cos(monster.yaw) * 0.12);
+
+      // Spine dorsal spikes
+      for (let i = 0; i < spineSpikes.length; i++) {
+        const yOff = 0.85 + i * 0.24 + mBobY;
+        const distBack = -0.26;
+        spineSpikes[i].position.set(
+          monster.x + Math.sin(monster.yaw + Math.PI) * distBack,
+          yOff,
+          monster.z + Math.cos(monster.yaw + Math.PI) * distBack
+        );
+        spineSpikes[i].rotation.y = monster.yaw;
+        spineSpikes[i].rotation.x = Math.PI / 2.6;
+        spineSpikes[i].isVisible = true;
+      }
+
+      // Head with bio-acoustic dish & twitch
+      const headTwitch = (monster.mode === "search" || monster.mode === "investigate") && Math.sin(now * 0.02) > 0.88 ? Math.sin(now * 0.08) * 0.28 : 0;
+      head.position.set(monster.x + Math.sin(monster.yaw) * 0.24, 2.38 + mBobY, monster.z + Math.cos(monster.yaw) * 0.24);
+      head.rotation.y = monster.yaw + headTwitch;
+
+      acousticDish.position.set(head.position.x + Math.cos(monster.yaw) * 0.26, head.position.y + 0.1, head.position.z - Math.sin(monster.yaw) * 0.26);
+      acousticDish.rotation.y = monster.yaw + 0.4;
+      acousticDish.isVisible = true;
+
+      eyeA.position.set(head.position.x - Math.cos(monster.yaw) * 0.13 + Math.sin(monster.yaw) * 0.18, head.position.y + 0.04, head.position.z + Math.sin(monster.yaw) * 0.13 + Math.cos(monster.yaw) * 0.18);
+      eyeB.position.set(head.position.x + Math.cos(monster.yaw) * 0.13 + Math.sin(monster.yaw) * 0.18, head.position.y + 0.04, head.position.z - Math.sin(monster.yaw) * 0.13 + Math.cos(monster.yaw) * 0.18);
+
+      eyeMat.emissiveColor = enraged ? new Color3(0.98, 0.16, 0.04) : new Color3(0.68, 0.07, 0.02);
+
+      // Asymmetric arms stride
+      const armSpread = 0.44;
+      armA.position.set(monster.x - Math.cos(monster.yaw) * armSpread, 1.25 + mBobY, monster.z + Math.sin(monster.yaw) * armSpread);
+      armA.rotation.x = stride * 0.55;
+      armA.rotation.z = 0.18;
+
+      armB.position.set(monster.x + Math.cos(monster.yaw) * (armSpread + 0.06), 1.18 + mBobY, monster.z - Math.sin(monster.yaw) * (armSpread + 0.06));
+      armB.rotation.x = -stride * 0.65;
+      armB.rotation.z = -0.22;
+
+      // Claw talons on arm B
+      for (let i = 0; i < clawTalons.length; i++) {
+        const tOffset = (i - 1) * 0.08;
+        clawTalons[i].position.set(armB.position.x + Math.sin(monster.yaw) * 0.12, armB.position.y - 0.72, armB.position.z + Math.cos(monster.yaw) * 0.12 + tOffset);
+        clawTalons[i].rotation.x = Math.PI / 1.8 - stride * 0.4;
+        clawTalons[i].rotation.y = monster.yaw;
+        clawTalons[i].isVisible = true;
+      }
+
       body.isVisible = true;
+      core.isVisible = true;
       head.isVisible = true;
       armA.isVisible = true;
       armB.isVisible = true;
       eyeA.isVisible = true;
       eyeB.isVisible = true;
-      const enraged = monster.mode === "chase" || monster.mode === "enraged";
-      eyeMat.emissiveColor = enraged ? new Color3(0.95, 0.18, 0.05) : new Color3(0.68, 0.08, 0.025);
+
+      // Trigger sonic shockwave pulse on mode transition or when close
+      if (enraged && sonicPulseProgress >= 1.0) {
+        sonicPulseProgress = 0;
+        sonicWave.position.set(monster.x, 0.08, monster.z);
+      }
+      if (sonicPulseProgress < 1.0) {
+        sonicPulseProgress += gameDt * 1.8;
+        const currentScale = 0.5 + sonicPulseProgress * 12.0;
+        sonicWave.scaling.set(currentScale, 1.0, currentScale);
+        sonicMat.alpha = Math.max(0, (1.0 - sonicPulseProgress) * 0.45);
+      } else {
+        sonicMat.alpha = 0;
+      }
+
+      // Dynamic chromatic aberration increase during chase or low health
+      if (pipeline.chromaticAberration) {
+        const targetAberration = enraged ? 58 : world.health < 40 ? 44 : 14;
+        pipeline.chromaticAberration.aberrationAmount += (targetAberration - pipeline.chromaticAberration.aberrationAmount) * Math.min(1, gameDt * 4);
+      }
+
+      // Flicker practical lights when predator stalks nearby
+      for (const light of staticLights) {
+        const lightDist = Math.hypot(light.position.x - monster.x, light.position.z - monster.z);
+        if (lightDist < 11) {
+          light.intensity = (light.name.includes("relay") ? 0.75 : 0.48) * (Math.random() < 0.14 ? 0.2 : 1.0);
+        }
+      }
+
       for (const model of remotePlayers.values()) {
         model.body.position.x += (model.target.x - model.body.position.x) * 0.28;
         model.body.position.z += (model.target.z - model.body.position.z) * 0.28;
@@ -680,7 +963,7 @@ export async function createGameScene(engine: Engine, canvas: HTMLCanvasElement)
       }
       ui.render(snapshot, world.items.filter(item => item.collected).length, currentSlot);
       ui.renderTeam(onlineState?.players ?? [], roomClient.playerId);
-      audio.update(gameDt, monster.mode, distance, world.flashlight, isMoving, sprinting, crouched);
+      audio.update(gameDt, monster.mode, distance, world.flashlight, isMoving, sprinting, crouched, room, p, cam.rotation.y, { x: monster.x, z: monster.z }, world.health);
   };
   const observer = scene.onBeforeRenderObservable.add(onFrame);
 

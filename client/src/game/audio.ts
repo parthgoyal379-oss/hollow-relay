@@ -1,12 +1,20 @@
 export class AudioDirector {
   private context: AudioContext | null = null;
   private master: GainNode | null = null;
+  private earFilter: BiquadFilterNode | null = null;
   private hum: OscillatorNode | null = null;
   private humGain: GainNode | null = null;
   private noiseNode: AudioBufferSourceNode | null = null;
   private noiseGain: GainNode | null = null;
+  private tinnitusOsc: OscillatorNode | null = null;
+  private tinnitusGain: GainNode | null = null;
+  private resonanceOsc: OscillatorNode | null = null;
+  private resonanceGain: GainNode | null = null;
+  private spatialPanner: PannerNode | null = null;
   private heartbeatTimer = 0;
   private footstepTimer = 0;
+  private monsterStepTimer = 0;
+  private monsterClickTimer = 0;
   private lastMode = "patrol";
 
   unlock() {
@@ -14,15 +22,23 @@ export class AudioDirector {
       const AudioCtor = window.AudioContext || (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
       if (!AudioCtor) return;
       this.context = new AudioCtor();
+
+      // Master output stage with dynamic concussion low-pass filter
+      this.earFilter = this.context.createBiquadFilter();
+      this.earFilter.type = "lowpass";
+      this.earFilter.frequency.value = 20000;
+      this.earFilter.Q.value = 0.7;
+
       this.master = this.context.createGain();
-      this.master.gain.value = 0.22;
+      this.master.gain.value = 0.24;
+      this.earFilter.connect(this.master);
       this.master.connect(this.context.destination);
 
       // Low rumble filter for ambient drone
       const filter = this.context.createBiquadFilter();
       filter.type = "lowpass";
       filter.frequency.value = 180;
-      filter.connect(this.master);
+      filter.connect(this.earFilter);
 
       this.hum = this.context.createOscillator();
       this.hum.type = "triangle";
@@ -52,10 +68,53 @@ export class AudioDirector {
         windFilter.type = "bandpass";
         windFilter.frequency.value = 320;
         windFilter.Q.value = 1.2;
-        this.noiseNode.connect(windFilter).connect(this.noiseGain).connect(this.master);
+        this.noiseNode.connect(windFilter).connect(this.noiseGain).connect(this.earFilter);
         this.noiseNode.start();
       } catch {
         /* buffer audio optional */
+      }
+
+      // Tinnitus Ring (3850Hz high pitch ringing on low health or strike)
+      try {
+        this.tinnitusOsc = this.context.createOscillator();
+        this.tinnitusOsc.type = "sine";
+        this.tinnitusOsc.frequency.value = 3850;
+        this.tinnitusGain = this.context.createGain();
+        this.tinnitusGain.gain.value = 0.0;
+        this.tinnitusOsc.connect(this.tinnitusGain).connect(this.master);
+        this.tinnitusOsc.start();
+      } catch {
+        /* optional */
+      }
+
+      // 734.2 kHz Bio-Acoustic Carrier resonance (audible heterodyne harmonic at 734Hz)
+      try {
+        this.resonanceOsc = this.context.createOscillator();
+        this.resonanceOsc.type = "sine";
+        this.resonanceOsc.frequency.value = 734.2;
+        this.resonanceGain = this.context.createGain();
+        this.resonanceGain.gain.value = 0.0;
+        const resFilter = this.context.createBiquadFilter();
+        resFilter.type = "bandpass";
+        resFilter.frequency.value = 734;
+        resFilter.Q.value = 6;
+        this.resonanceOsc.connect(resFilter).connect(this.resonanceGain).connect(this.earFilter);
+        this.resonanceOsc.start();
+      } catch {
+        /* optional */
+      }
+
+      // Spatial 3D Panner for Predator (Chief Engineer Cole)
+      try {
+        this.spatialPanner = this.context.createPanner();
+        this.spatialPanner.panningModel = "HRTF";
+        this.spatialPanner.distanceModel = "inverse";
+        this.spatialPanner.refDistance = 2.5;
+        this.spatialPanner.maxDistance = 40;
+        this.spatialPanner.rolloffFactor = 1.25;
+        this.spatialPanner.connect(this.earFilter);
+      } catch {
+        /* fallback without panner */
       }
 
       this.context.resume().catch(() => undefined);
@@ -65,7 +124,7 @@ export class AudioDirector {
   }
 
   cue(frequency = 240, duration = 0.11, volume = 0.08) {
-    if (!this.context || !this.master) return;
+    if (!this.context || !this.earFilter) return;
     const osc = this.context.createOscillator();
     const gain = this.context.createGain();
     const now = this.context.currentTime;
@@ -74,37 +133,137 @@ export class AudioDirector {
     osc.frequency.exponentialRampToValueAtTime(Math.max(40, frequency * 0.72), now + duration);
     gain.gain.setValueAtTime(volume, now);
     gain.gain.exponentialRampToValueAtTime(0.001, now + duration);
-    osc.connect(gain).connect(this.master);
+    osc.connect(gain).connect(this.earFilter);
     osc.start(now);
     osc.stop(now + duration + 0.02);
   }
 
-  footstep(sprinting = false, crouching = false) {
-    if (!this.context || !this.master) return;
+  footstep(sprinting = false, crouching = false, room = "") {
+    if (!this.context || !this.earFilter) return;
     const now = this.context.currentTime;
+    const lower = room.toLowerCase();
+    const isWater = lower.includes("archive") || lower.includes("conservatory");
+    const isYard = lower.includes("yard") || lower.includes("gate");
+    const isMetal = lower.includes("relay") || lower.includes("boiler");
+
+    const basePitch = sprinting ? 75 : crouching ? 52 : 62;
+    const vol = crouching ? 0.025 : sprinting ? 0.09 : 0.055;
+
+    // Body weight low-end thud
     const osc = this.context.createOscillator();
     const gain = this.context.createGain();
     const filter = this.context.createBiquadFilter();
-
     filter.type = "lowpass";
     filter.frequency.setValueAtTime(crouching ? 80 : 130, now);
-
-    const basePitch = sprinting ? 75 : crouching ? 52 : 62;
     osc.type = "sine";
     osc.frequency.setValueAtTime(basePitch + (Math.random() - 0.5) * 8, now);
-    osc.frequency.exponentialRampToValueAtTime(35, now + 0.08);
-
-    const vol = crouching ? 0.025 : sprinting ? 0.09 : 0.055;
+    osc.frequency.exponentialRampToValueAtTime(32, now + 0.08);
     gain.gain.setValueAtTime(vol, now);
     gain.gain.exponentialRampToValueAtTime(0.001, now + (sprinting ? 0.1 : 0.08));
-
-    osc.connect(filter).connect(gain).connect(this.master);
+    osc.connect(filter).connect(gain).connect(this.earFilter);
     osc.start(now);
     osc.stop(now + 0.1);
+
+    // Surface texture transient
+    try {
+      const bufferSize = Math.floor(this.context.sampleRate * 0.06);
+      const buffer = this.context.createBuffer(1, bufferSize, this.context.sampleRate);
+      const data = buffer.getChannelData(0);
+      for (let i = 0; i < bufferSize; i++) data[i] = Math.random() * 2 - 1;
+      const noise = this.context.createBufferSource();
+      noise.buffer = buffer;
+      const sFilter = this.context.createBiquadFilter();
+      const sGain = this.context.createGain();
+
+      if (isWater) {
+        // Puddle splash in Flooded Archive
+        sFilter.type = "bandpass";
+        sFilter.frequency.setValueAtTime(2600, now);
+        sFilter.Q.value = 2.4;
+        sGain.gain.setValueAtTime(vol * 0.7, now);
+        sGain.gain.exponentialRampToValueAtTime(0.001, now + 0.07);
+      } else if (isYard) {
+        // Gravel / earth crunch in Yard
+        sFilter.type = "bandpass";
+        sFilter.frequency.setValueAtTime(950, now);
+        sFilter.Q.value = 1.4;
+        sGain.gain.setValueAtTime(vol * 0.8, now);
+        sGain.gain.exponentialRampToValueAtTime(0.001, now + 0.06);
+      } else if (isMetal) {
+        // Resonant metal hollow step in Relay Room
+        sFilter.type = "bandpass";
+        sFilter.frequency.setValueAtTime(480, now);
+        sFilter.Q.value = 4.2;
+        sGain.gain.setValueAtTime(vol * 0.5, now);
+        sGain.gain.exponentialRampToValueAtTime(0.001, now + 0.08);
+      } else {
+        // Creaking wood floorboard transient
+        sFilter.type = "bandpass";
+        sFilter.frequency.setValueAtTime(1200 + (Math.random() - 0.5) * 300, now);
+        sFilter.Q.value = 1.8;
+        sGain.gain.setValueAtTime(vol * 0.45, now);
+        sGain.gain.exponentialRampToValueAtTime(0.001, now + 0.05);
+      }
+
+      noise.connect(sFilter).connect(sGain).connect(this.earFilter);
+      noise.start(now);
+    } catch {
+      /* noise fallback */
+    }
+  }
+
+  monsterClick(relX: number, relZ: number) {
+    if (!this.context || !this.spatialPanner) return;
+    const now = this.context.currentTime;
+    try {
+      this.spatialPanner.positionX.setValueAtTime(relX, now);
+      this.spatialPanner.positionZ.setValueAtTime(relZ, now);
+      this.spatialPanner.positionY.setValueAtTime(0.8, now);
+
+      const osc = this.context.createOscillator();
+      const gain = this.context.createGain();
+      const filter = this.context.createBiquadFilter();
+      osc.type = "sawtooth";
+      osc.frequency.setValueAtTime(1400 + Math.random() * 800, now);
+      osc.frequency.exponentialRampToValueAtTime(320, now + 0.04);
+      filter.type = "bandpass";
+      filter.frequency.setValueAtTime(1800, now);
+      filter.Q.value = 3.5;
+      gain.gain.setValueAtTime(0.12, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.045);
+      osc.connect(filter).connect(gain).connect(this.spatialPanner);
+      osc.start(now);
+      osc.stop(now + 0.05);
+    } catch {
+      /* ignore */
+    }
+  }
+
+  monsterStep(relX: number, relZ: number, heavy = false) {
+    if (!this.context || !this.spatialPanner) return;
+    const now = this.context.currentTime;
+    try {
+      this.spatialPanner.positionX.setValueAtTime(relX, now);
+      this.spatialPanner.positionZ.setValueAtTime(relZ, now);
+      this.spatialPanner.positionY.setValueAtTime(0, now);
+
+      const osc = this.context.createOscillator();
+      const gain = this.context.createGain();
+      osc.type = "triangle";
+      osc.frequency.setValueAtTime(heavy ? 55 : 44, now);
+      osc.frequency.exponentialRampToValueAtTime(24, now + 0.16);
+      gain.gain.setValueAtTime(heavy ? 0.22 : 0.12, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + (heavy ? 0.22 : 0.15));
+      osc.connect(gain).connect(this.spatialPanner);
+      osc.start(now);
+      osc.stop(now + 0.25);
+    } catch {
+      /* ignore */
+    }
   }
 
   pickupItem() {
-    if (!this.context || !this.master) return;
+    if (!this.context || !this.earFilter) return;
     const now = this.context.currentTime;
     for (let i = 0; i < 2; i++) {
       const osc = this.context.createOscillator();
@@ -114,14 +273,14 @@ export class AudioDirector {
       osc.frequency.setValueAtTime(freq, now + i * 0.06);
       gain.gain.setValueAtTime(0.06, now + i * 0.06);
       gain.gain.exponentialRampToValueAtTime(0.001, now + i * 0.06 + 0.14);
-      osc.connect(gain).connect(this.master);
+      osc.connect(gain).connect(this.earFilter);
       osc.start(now + i * 0.06);
       osc.stop(now + i * 0.06 + 0.15);
     }
   }
 
   flashlightSwitch(on: boolean) {
-    if (!this.context || !this.master) return;
+    if (!this.context || !this.earFilter) return;
     const now = this.context.currentTime;
     const osc = this.context.createOscillator();
     const gain = this.context.createGain();
@@ -130,13 +289,13 @@ export class AudioDirector {
     osc.frequency.exponentialRampToValueAtTime(on ? 600 : 400, now + 0.035);
     gain.gain.setValueAtTime(0.04, now);
     gain.gain.exponentialRampToValueAtTime(0.001, now + 0.04);
-    osc.connect(gain).connect(this.master);
+    osc.connect(gain).connect(this.earFilter);
     osc.start(now);
     osc.stop(now + 0.05);
   }
 
   pageRustle() {
-    if (!this.context || !this.master) return;
+    if (!this.context || !this.earFilter) return;
     const now = this.context.currentTime;
     try {
       const bufferSize = Math.floor(this.context.sampleRate * 0.16);
@@ -155,7 +314,7 @@ export class AudioDirector {
       const gain = this.context.createGain();
       gain.gain.setValueAtTime(0.08, now);
       gain.gain.exponentialRampToValueAtTime(0.001, now + 0.16);
-      source.connect(filter).connect(gain).connect(this.master);
+      source.connect(filter).connect(gain).connect(this.earFilter);
       source.start(now);
     } catch {
       this.cue(800, 0.08, 0.04);
@@ -163,7 +322,7 @@ export class AudioDirector {
   }
 
   radioStatic() {
-    if (!this.context || !this.master) return;
+    if (!this.context || !this.earFilter) return;
     const now = this.context.currentTime;
     try {
       const bufferSize = Math.floor(this.context.sampleRate * 0.22);
@@ -181,7 +340,7 @@ export class AudioDirector {
       const gain = this.context.createGain();
       gain.gain.setValueAtTime(0.10, now);
       gain.gain.exponentialRampToValueAtTime(0.001, now + 0.21);
-      source.connect(filter).connect(gain).connect(this.master);
+      source.connect(filter).connect(gain).connect(this.earFilter);
       source.start(now);
 
       const osc = this.context.createOscillator();
@@ -190,7 +349,7 @@ export class AudioDirector {
       osc.frequency.setValueAtTime(1750, now);
       oscGain.gain.setValueAtTime(0.03, now);
       oscGain.gain.exponentialRampToValueAtTime(0.001, now + 0.07);
-      osc.connect(oscGain).connect(this.master);
+      osc.connect(oscGain).connect(this.earFilter);
       osc.start(now);
       osc.stop(now + 0.08);
     } catch {
@@ -199,7 +358,7 @@ export class AudioDirector {
   }
 
   chaseStinger() {
-    if (!this.context || !this.master) return;
+    if (!this.context || !this.earFilter) return;
     const now = this.context.currentTime;
     const osc = this.context.createOscillator();
     const osc2 = this.context.createOscillator();
@@ -223,7 +382,7 @@ export class AudioDirector {
 
     osc.connect(filter);
     osc2.connect(filter);
-    filter.connect(gain).connect(this.master);
+    filter.connect(gain).connect(this.earFilter);
 
     osc.start(now);
     osc2.start(now);
@@ -231,15 +390,72 @@ export class AudioDirector {
     osc2.stop(now + 0.95);
   }
 
-  update(dt: number, mode: string, distance: number, flashlight: boolean, moving = false, sprinting = false, crouching = false) {
+  update(
+    dt: number,
+    mode: string,
+    distance: number,
+    flashlight: boolean,
+    moving = false,
+    sprinting = false,
+    crouching = false,
+    room = "",
+    playerPos = { x: 0, z: 0 },
+    playerYaw = 0,
+    monsterPos = { x: 0, z: 0 },
+    health = 100
+  ) {
     if (!this.context) return;
+    const now = this.context.currentTime;
+
+    // Concussion / ear damage effect when health is low
+    if (this.earFilter) {
+      const earTarget = health < 35 ? 420 : health < 60 ? 1200 : 20000;
+      this.earFilter.frequency.setTargetAtTime(earTarget, now, 0.3);
+    }
+    if (this.tinnitusGain) {
+      const tinTarget = health < 30 ? 0.045 : health < 45 ? 0.015 : 0.0;
+      this.tinnitusGain.gain.setTargetAtTime(tinTarget, now, 0.4);
+    }
+
+    // 734.2 kHz carrier resonance hum increases when close to predator (<18m)
+    if (this.resonanceGain) {
+      const resTarget = distance < 18 ? Math.max(0, (1 - distance / 18) * 0.038) : 0;
+      this.resonanceGain.gain.setTargetAtTime(resTarget, now, 0.2);
+    }
+
+    // Compute relative audio position for spatial panner
+    const dx = monsterPos.x - playerPos.x;
+    const dz = monsterPos.z - playerPos.z;
+    // Rotate relative to player yaw for accurate headphone stereo orientation
+    const cosY = Math.cos(-playerYaw);
+    const sinY = Math.sin(-playerYaw);
+    const relX = dx * cosY - dz * sinY;
+    const relZ = dx * sinY + dz * cosY;
+
+    // Periodic spatial monster footsteps & clicking
+    if (distance < 32) {
+      this.monsterStepTimer -= dt;
+      const stepInterval = mode === "chase" || mode === "enraged" ? 0.36 : 0.72;
+      if (this.monsterStepTimer <= 0) {
+        this.monsterStep(relX, relZ, mode === "chase" || mode === "enraged");
+        this.monsterStepTimer = stepInterval;
+      }
+
+      this.monsterClickTimer -= dt;
+      if (this.monsterClickTimer <= 0) {
+        this.monsterClick(relX, relZ);
+        this.monsterClickTimer = mode === "chase" ? 0.6 + Math.random() * 0.5 : 1.8 + Math.random() * 2.2;
+      }
+    }
+
+    // Background Drone & Wind
     if (this.humGain) {
       const target = mode === "chase" || mode === "enraged" ? 0.32 : mode === "investigate" || mode === "search" ? 0.2 : 0.12;
-      this.humGain.gain.setTargetAtTime(target, this.context.currentTime, 0.4);
+      this.humGain.gain.setTargetAtTime(target, now, 0.4);
     }
     if (this.noiseGain) {
       const windTarget = mode === "chase" ? 0.11 : 0.05;
-      this.noiseGain.gain.setTargetAtTime(windTarget, this.context.currentTime, 0.5);
+      this.noiseGain.gain.setTargetAtTime(windTarget, now, 0.5);
     }
 
     if (mode !== this.lastMode) {
@@ -253,12 +469,12 @@ export class AudioDirector {
       this.lastMode = mode;
     }
 
-    // Footsteps
+    // Surface-aware footsteps
     if (moving) {
       this.footstepTimer -= dt;
       const interval = sprinting ? 0.32 : crouching ? 0.65 : 0.48;
       if (this.footstepTimer <= 0) {
-        this.footstep(sprinting, crouching);
+        this.footstep(sprinting, crouching, room);
         this.footstepTimer = interval;
       }
     } else {
@@ -269,7 +485,6 @@ export class AudioDirector {
     const danger = Math.max(0, Math.min(1, 1 - distance / 22));
     this.heartbeatTimer -= dt;
     if (danger > 0.15 && this.heartbeatTimer <= 0) {
-      // Lub-dub double pulse
       this.cue(48 + danger * 12, 0.08, 0.05 + danger * 0.09);
       setTimeout(() => this.cue(42 + danger * 10, 0.08, 0.035 + danger * 0.07), 110);
       this.heartbeatTimer = (mode === "chase" || mode === "enraged" ? 0.45 : 0.95) - danger * 0.32;
@@ -284,6 +499,8 @@ export class AudioDirector {
   dispose() {
     try { this.hum?.stop(); } catch { /* ignore */ }
     try { this.noiseNode?.stop(); } catch { /* ignore */ }
+    try { this.tinnitusOsc?.stop(); } catch { /* ignore */ }
+    try { this.resonanceOsc?.stop(); } catch { /* ignore */ }
     this.context?.close().catch(() => undefined);
     this.context = null;
   }

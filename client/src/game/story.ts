@@ -166,3 +166,90 @@ export function evaluateEscape(elapsedSeconds: number, health: number, dossiersR
     epilogue: choice.text
   };
 }
+
+import type { ItemId } from "./types";
+
+export interface ItemExamineInfo {
+  id: ItemId;
+  name: string;
+  category: "RELAY COMPONENT" | "GATE HARDWARE" | "SURVIVAL GEAR" | "FIELD DECOY";
+  militaryRef: string;
+  weight: string;
+  description: string;
+  protocol: string;
+}
+
+export const ITEM_EXAMINE_DATA: Record<ItemId, ItemExamineInfo> = {
+  fuse: {
+    id: "fuse",
+    name: "Silver Vacuum Tube (Model CV-1070)",
+    category: "RELAY COMPONENT",
+    militaryRef: "ONR-SPEC-47-B",
+    weight: "0.45 kg",
+    description: "Thorium-filament high-frequency triode amplifier tube with silvered quartz envelope. Used in coastal radar telegraph transceivers to isolate carrier waves.",
+    protocol: "Slot 1 of 3 required for Master Relay Console. Essential for tuning transmitter to 734.2 kHz."
+  },
+  spool: {
+    id: "spool",
+    name: "Copper Induction Spool",
+    category: "RELAY COMPONENT",
+    militaryRef: "TEL-IND-800T",
+    weight: "1.20 kg",
+    description: "Heavy precision-wound copper choke coil encased in vulcanized gutta-percha. Suppresses stray bio-acoustic harmonic feedback across high-voltage relays.",
+    protocol: "Slot 2 of 3 required for Master Relay Console. Dampens sonic resonance spikes."
+  },
+  valve: {
+    id: "valve",
+    name: "High-Pressure Hydraulic Valve",
+    category: "RELAY COMPONENT",
+    militaryRef: "NAV-VALVE-44",
+    weight: "2.10 kg",
+    description: "Cast naval bronze three-way directional flow regulator with lead gasket seals. Built to withstand subterranean steam pressure in the boiler line.",
+    protocol: "Slot 3 of 3 required for Master Relay Console. Connects hydraulic line pressure."
+  },
+  gateKey: {
+    id: "gateKey",
+    name: "Blackwater Estate Gate Key",
+    category: "GATE HARDWARE",
+    militaryRef: "KEY-MORTISE-01",
+    weight: "0.35 kg",
+    description: "Hand-forged double-bitted iron key stamped with the naval anchor and owl crest. Opens the perimeter hydraulic ram deadbolt in the Black Yard.",
+    protocol: "Insert into the perimeter gate lock cylinder outside along with kerosene fuel."
+  },
+  fuelCell: {
+    id: "fuelCell",
+    name: "Military Kerosene Canister",
+    category: "GATE HARDWARE",
+    militaryRef: "FUEL-CAN-20L",
+    weight: "3.40 kg",
+    description: "Heavy-gauge stamped steel jerrycan filled with high-flashpoint naval kerosene. Used to ignite the auxiliary steam pressure boiler.",
+    protocol: "Pours into the hydraulic auxiliary pressure cylinder at the iron yard gate."
+  },
+  medkit: {
+    id: "medkit",
+    name: "Emergency First Aid Spray",
+    category: "SURVIVAL GEAR",
+    militaryRef: "MED-SPRAY-1947",
+    weight: "0.50 kg",
+    description: "Pressurized aerosol canister containing topical coagulant styptic, ethyl chloride analgesic, and sterile field dressing. Restores 45% vital integrity.",
+    protocol: "Press [SPACE] or use from inventory to immediately treat traumatic lacerations."
+  },
+  noiseMaker: {
+    id: "noiseMaker",
+    name: "Clockwork Metronome Decoy",
+    category: "FIELD DECOY",
+    militaryRef: "DECOY-TICK-V2",
+    weight: "0.80 kg",
+    description: "Wind-up brass spring mechanism fitted with an acoustic resonating chime. Produces high-amplitude rhythmic clicking (85 dB) for 15 seconds.",
+    protocol: "Drop in a corridor or adjoining room to mislead Chief Engineer Cole's hearing away from your path."
+  },
+  battery: {
+    id: "battery",
+    name: "Industrial Dry Cell Battery",
+    category: "SURVIVAL GEAR",
+    militaryRef: "CELL-ZINC-1.5V",
+    weight: "0.65 kg",
+    description: "Heavy zinc-carbon cylindrical cell with wax hermetic seal. Recharges the survivor's handheld inspection lamp to full 100% capacity.",
+    protocol: "Press [SPACE] while lamp battery is depleted to restore illumination."
+  }
+};
