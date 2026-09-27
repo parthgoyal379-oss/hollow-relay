@@ -47,15 +47,15 @@ const itemColors: Record<ItemId, Color3> = {
 export async function createGameScene(engine: Engine, canvas: HTMLCanvasElement): Promise<GameHandle> {
   const scene = new Scene(engine);
   scene.clearColor = new Color4(0.012, 0.016, 0.018, 1);
-  scene.fogMode = Scene.FOGMODE_EXP;
-  scene.fogDensity = 0.0135;
-  scene.fogColor = new Color3(0.05, 0.065, 0.058);
+  scene.fogMode = Scene.FOGMODE_EXP2;
+  scene.fogDensity = 0.038;
+  scene.fogColor = new Color3(0.012, 0.014, 0.016);
   scene.collisionsEnabled = false;
 
   const hemi = new HemisphericLight("estate-ambient", new Vector3(0, 1, 0), scene);
-  hemi.intensity = 1.35;
-  hemi.diffuse = new Color3(0.50, 0.56, 0.52);
-  hemi.groundColor = new Color3(0.22, 0.19, 0.17);
+  hemi.intensity = 0.18;
+  hemi.diffuse = new Color3(0.12, 0.14, 0.16);
+  hemi.groundColor = new Color3(0.04, 0.035, 0.03);
 
   const cam = new UniversalCamera("survivor-view", new Vector3(-17, 1.62, -14), scene);
   cam.minZ = 0.08; cam.maxZ = 90; cam.fov = 1.08;
@@ -66,27 +66,35 @@ export async function createGameScene(engine: Engine, canvas: HTMLCanvasElement)
   // AAA Cinematic Post-Processing Pipeline
   const pipeline = new DefaultRenderingPipeline("horrorPipeline", true, scene, [cam]);
   pipeline.bloomEnabled = true;
-  pipeline.bloomThreshold = 0.78;
-  pipeline.bloomWeight = 0.40;
-  pipeline.bloomKernel = 32;
-  pipeline.bloomScale = 0.5;
+  pipeline.bloomThreshold = 0.38;
+  pipeline.bloomWeight = 0.65;
+  pipeline.bloomKernel = 48;
+  pipeline.bloomScale = 0.6;
 
   pipeline.chromaticAberrationEnabled = true;
-  pipeline.chromaticAberration.aberrationAmount = 14;
-  pipeline.chromaticAberration.radialIntensity = 1.2;
+  pipeline.chromaticAberration.aberrationAmount = 4;
+  pipeline.chromaticAberration.radialIntensity = 0.8;
 
   pipeline.grainEnabled = true;
-  pipeline.grain.intensity = 14;
+  pipeline.grain.intensity = 8;
   pipeline.grain.animated = true;
 
   pipeline.sharpenEnabled = true;
-  pipeline.sharpen.edgeAmount = 0.22;
+  pipeline.sharpen.edgeAmount = 0.18;
+
+  pipeline.fxaaEnabled = true;
+
+  pipeline.depthOfFieldEnabled = true;
+  pipeline.depthOfFieldBlurLevel = 1;
+  pipeline.depthOfField.focalLength = 85;
+  pipeline.depthOfField.fStop = 2.8;
+  pipeline.depthOfField.focusDistance = 6000;
 
   const glow = new GlowLayer("glowLayer", scene, {
     mainTextureRatio: 0.5,
-    blurKernelSize: 16,
+    blurKernelSize: 24,
   });
-  glow.intensity = 0.65;
+  glow.intensity = 0.85;
 
   // Atmospheric Volumetric Floating Dust Particles (drifting in the flashlight cone)
   const dustTex = new DynamicTexture("dustTexture", 32, scene, false);
@@ -489,11 +497,11 @@ export async function createGameScene(engine: Engine, canvas: HTMLCanvasElement)
   }
   for (let i = 0; i < 6; i++) addBox(`path-stone-${i}`, 16 + i * 2.2, 0.05, -26 + (i % 2) * 1.1, 1.6, 0.1, 1, outdoorMat);
 
-  const flashlight = new SpotLight("handheld-beam", new Vector3(0.18, -0.15, 0.25), new Vector3(0, 0, 1), 1.05, 1.15, scene);
-  flashlight.parent = cam; flashlight.range = 44; flashlight.intensity = 5.2; flashlight.diffuse = new Color3(0.98, 0.93, 0.84); flashlight.setEnabled(false);
+  const flashlight = new SpotLight("handheld-beam", new Vector3(0.18, -0.15, 0.25), new Vector3(0, 0, 1), 0.75, 2.4, scene);
+  flashlight.parent = cam; flashlight.range = 38; flashlight.intensity = 14; flashlight.diffuse = new Color3(1.0, 0.95, 0.82); flashlight.setEnabled(false);
 
   const torchFill = new PointLight("torch-fill", new Vector3(0.12, -0.12, 0.35), scene);
-  torchFill.parent = cam; torchFill.range = 16; torchFill.intensity = 0.92; torchFill.diffuse = new Color3(0.95, 0.88, 0.74); torchFill.setEnabled(false);
+  torchFill.parent = cam; torchFill.range = 9; torchFill.intensity = 1.8; torchFill.diffuse = new Color3(0.95, 0.85, 0.65); torchFill.setEnabled(false);
 
   // Volumetric Flashlight Beam Cone
   const beamCone = MeshBuilder.CreateCylinder("torch-beam-cone", {
@@ -976,7 +984,7 @@ export async function createGameScene(engine: Engine, canvas: HTMLCanvasElement)
       armB.rotation.x = Math.PI / 2.1;
 
       if (pipeline.chromaticAberration) {
-        pipeline.chromaticAberration.aberrationAmount = 90;
+        pipeline.chromaticAberration.aberrationAmount = 65;
       }
       const snapshot = world.snapshot(); snapshot.room = roomAt(cam.position.x, cam.position.z);
       ui.render(snapshot, world.items.filter(item => item.collected).length, currentSlot);
@@ -1061,7 +1069,7 @@ export async function createGameScene(engine: Engine, canvas: HTMLCanvasElement)
       if (world.flashlight) {
         const distToMonster = Math.hypot(cam.position.x - monster.x, cam.position.z - monster.z);
         const flickerChance = world.battery < 20 ? 0.16 : distToMonster < 8.5 ? 0.08 : 0.003;
-        flashlight.intensity = Math.random() < flickerChance ? 1.0 + Math.random() * 2.0 : 5.2;
+        flashlight.intensity = Math.random() < flickerChance ? 3.0 + Math.random() * 5.0 : 14;
       }
 
       if (onlineState?.phase === "playing") {
@@ -1200,7 +1208,7 @@ export async function createGameScene(engine: Engine, canvas: HTMLCanvasElement)
 
       // Dynamic chromatic aberration increase during chase or low health
       if (pipeline.chromaticAberration) {
-        const targetAberration = enraged ? 58 : world.health < 40 ? 44 : 14;
+        const targetAberration = enraged ? 45 : world.health < 40 ? 32 : 4;
         pipeline.chromaticAberration.aberrationAmount += (targetAberration - pipeline.chromaticAberration.aberrationAmount) * Math.min(1, gameDt * 4);
       }
 

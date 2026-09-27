@@ -6,7 +6,23 @@
 *{box-sizing:border-box}html,body,#root{width:100%;height:100%;margin:0;overflow:hidden;background:#090d0c}button{font:inherit;color:inherit}button:focus-visible{outline:2px solid #c29557;outline-offset:3px}.game-canvas{position:fixed;inset:0;width:100%;height:100%;display:block;outline:none;touch-action:none}
 #hollow-ui{position:fixed;inset:0;z-index:5;pointer-events:none;color:#d2d0c6;overflow:hidden;text-transform:uppercase;letter-spacing:.06em;user-select:none}
 #hollow-ui button{pointer-events:auto;cursor:pointer;border:0;text-transform:uppercase;letter-spacing:.1em}
-.game-vignette{position:absolute;inset:0;background:radial-gradient(ellipse at center,transparent 35%,rgba(0,0,0,.18) 72%,rgba(0,0,0,.73) 130%);pointer-events:none;transition:opacity .3s ease,background .3s ease}
+.game-vignette{position:absolute;inset:0;background:radial-gradient(ellipse at center,transparent 15%,rgba(0,0,0,.5) 50%,rgba(0,0,0,.95) 100%);box-shadow:inset 0 0 120px 60px rgba(0,0,0,.92),inset 0 0 250px 100px rgba(0,0,0,.65);pointer-events:none;transition:opacity .3s ease,background .3s ease}
+
+#hollow-ui[data-phase="playing"]::before,
+#hollow-ui[data-phase="deathCinematic"]::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 1;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent 0px,
+    transparent 2px,
+    rgba(0, 0, 0, 0.04) 2px,
+    rgba(0, 0, 0, 0.04) 4px
+  );
+}
 .game-vignette.threat-close{background:radial-gradient(ellipse at center,transparent 20%,rgba(160,30,15,.22) 65%,rgba(0,0,0,.9) 115%);animation:pulse-vignette .8s infinite alternate ease-in-out}
 .game-vignette.threat-danger{background:radial-gradient(ellipse at center,transparent 12%,rgba(210,25,12,.4) 52%,rgba(25,2,2,.96) 105%);animation:pulse-vignette .38s infinite alternate ease-in-out}
 .game-vignette.stealth-hidden{background:radial-gradient(ellipse at center,transparent 20%,rgba(0,0,0,.55) 60%,rgba(0,0,0,.95) 100%)}
@@ -150,15 +166,51 @@
 /* ========================================================
    AAA DEATH JUMPSCARE & CINEMATIC SCREEN
    ======================================================== */
-.death-cinematic-screen{position:fixed;inset:0;z-index:90;display:flex;flex-direction:column;align-items:center;justify-content:center;background:radial-gradient(circle,rgba(180,20,10,.65) 0%,rgba(5,2,2,.98) 75%);pointer-events:none;animation:death-shockwave .15s infinite alternate}
-@keyframes death-shockwave{from{filter:contrast(1.6) brightness(0.9) hue-rotate(-10deg)}to{filter:contrast(2.2) brightness(1.2) hue-rotate(15deg)}}
-.death-stamp{border:4px solid #e23b2b;padding:12px 32px;font:800 clamp(32px,6vw,56px)/1 'Barlow Condensed',sans-serif;color:#fce4e4;letter-spacing:.25em;background:rgba(40,4,4,.85);box-shadow:0 0 50px rgba(226,59,43,.8);text-shadow:0 0 20px #e23b2b;transform:rotate(-4deg);margin-bottom:20px}
-.death-reason{font:600 clamp(14px,2.5vw,22px)/1.4 'IBM Plex Mono',monospace;color:#ff9e94;letter-spacing:.15em;text-align:center;max-width:680px;text-shadow:0 0 12px rgba(255,100,80,.6)}
+.death-cinematic-screen {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: radial-gradient(ellipse at center, rgba(45, 0, 0, 0.95) 0%, rgba(8, 0, 0, 0.98) 70%, #000 100%);
+  animation: deathPulse 0.15s ease-in-out infinite alternate;
+}
+.death-cinematic-screen.hidden-screen {
+  display: none;
+}
+.death-stamp {
+  font-size: clamp(42px, 8vw, 96px);
+  font-weight: 900;
+  letter-spacing: 0.25em;
+  color: #ff1a1a;
+  text-shadow: 0 0 40px rgba(255, 0, 0, 0.8), 0 0 80px rgba(255, 0, 0, 0.4);
+  text-transform: uppercase;
+  animation: stampSlam 0.3s ease-out;
+}
+.death-reason {
+  font-size: 11px;
+  letter-spacing: 0.18em;
+  color: rgba(255, 80, 60, 0.7);
+  max-width: 480px;
+  text-align: center;
+  margin-top: 24px;
+  line-height: 1.8;
+}
+@keyframes deathPulse {
+  from { background: radial-gradient(ellipse at center, rgba(45, 0, 0, 0.95) 0%, rgba(8, 0, 0, 0.98) 70%, #000 100%); }
+  to { background: radial-gradient(ellipse at center, rgba(65, 0, 0, 0.95) 0%, rgba(12, 0, 0, 0.98) 70%, #000 100%); }
+}
+@keyframes stampSlam {
+  from { transform: scale(3); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}
 
 /* Wardrobe Hiding Slats Vignette */
-.hiding-vignette{position:fixed;inset:0;z-index:35;pointer-events:none;display:none;background:radial-gradient(circle,transparent 30%,rgba(0,0,0,.92) 80%);box-shadow:inset 0 0 140px #000}
-.hiding-vignette.active{display:block}
-.hiding-slats{position:absolute;inset:0;background:repeating-linear-gradient(0deg,rgba(0,0,0,.75) 0px,rgba(0,0,0,.75) 18px,transparent 18px,transparent 36px);opacity:.65}
+.hiding-vignette{position:fixed;inset:0;z-index:35;pointer-events:none;display:none;background:radial-gradient(circle,transparent 10%,rgba(0,0,0,.98) 70%);box-shadow:inset 0 0 200px #000}
+.hiding-vignette.active{display:block;opacity:1;}
+.hiding-slats{position:absolute;inset:0;background:repeating-linear-gradient(0deg,rgba(0,0,0,.95) 0px,rgba(0,0,0,.95) 40px,transparent 40px,transparent 60px);opacity:.85}
 .breath-prompt{position:absolute;bottom:14%;left:50%;transform:translateX(-50%);display:flex;align-items:center;gap:12px;background:rgba(12,16,14,.9);border:1px solid #c29557;padding:8px 20px;border-radius:3px;box-shadow:0 0 30px rgba(0,0,0,.9)}
 .breath-prompt strong{font:700 13px 'Barlow Condensed',sans-serif;color:#f4d084;letter-spacing:.16em}
 .breath-meter{width:110px;height:6px;background:rgba(40,45,40,.8);border:1px solid rgba(194,149,87,.3);overflow:hidden}
