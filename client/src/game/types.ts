@@ -23,6 +23,8 @@ export interface NoiseEvent {
   at: number;
 }
 
+import type { LoreDocument } from "./story";
+
 export interface HudSnapshot {
   phase: MatchPhase;
   elapsed: number;
@@ -47,6 +49,9 @@ export interface HudSnapshot {
   room: string;
   escapes: number;
   demo: boolean;
+  dossiersRead: number;
+  totalDossiers: number;
+  activeDossier: LoreDocument | null;
 }
 
 export interface MapNode {

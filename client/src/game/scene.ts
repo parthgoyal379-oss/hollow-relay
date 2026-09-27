@@ -22,6 +22,7 @@ import { nearestRoom, roomAt, roomById, rooms, routeTo } from "./map";
 import type { HudSnapshot, ItemId } from "./types";
 import { GameUI } from "./ui";
 import { GameWorld } from "./world";
+import { LORE_DOCUMENTS } from "./story";
 
 export interface GameHandle {
   scene: Scene;
@@ -39,16 +40,16 @@ const itemColors: Record<ItemId, Color3> = {
 
 export async function createGameScene(engine: Engine, canvas: HTMLCanvasElement): Promise<GameHandle> {
   const scene = new Scene(engine);
-  scene.clearColor = new Color4(0.012, 0.018, 0.019, 1);
+  scene.clearColor = new Color4(0.015, 0.02, 0.022, 1);
   scene.fogMode = Scene.FOGMODE_EXP;
-  scene.fogDensity = 0.019;
-  scene.fogColor = new Color3(0.045, 0.057, 0.052);
+  scene.fogDensity = 0.0125;
+  scene.fogColor = new Color3(0.06, 0.075, 0.068);
   scene.collisionsEnabled = false;
 
   const hemi = new HemisphericLight("estate-ambient", new Vector3(0, 1, 0), scene);
-  hemi.intensity = 0.92;
-  hemi.diffuse = new Color3(0.41, 0.48, 0.43);
-  hemi.groundColor = new Color3(0.055, 0.047, 0.038);
+  hemi.intensity = 1.35;
+  hemi.diffuse = new Color3(0.50, 0.56, 0.52);
+  hemi.groundColor = new Color3(0.22, 0.19, 0.17);
 
   const cam = new UniversalCamera("survivor-view", new Vector3(-17, 1.62, -14), scene);
   cam.minZ = 0.08; cam.maxZ = 90; cam.fov = 1.08;
@@ -136,10 +137,11 @@ export async function createGameScene(engine: Engine, canvas: HTMLCanvasElement)
     if (room.id !== "yard" && room.id !== "gate") {
       const lamp = addBox(`${room.id}-ceiling-lamp`, room.x, 3.98, room.z, 0.56, 0.13, 0.3, room.id === "relay" ? redMat : amberMat);
       lamp.isPickable = false;
-      if (["relay", "gallery", "boiler", "yard"].includes(room.id)) {
+      const isLitRoom = ["relay", "gallery", "boiler", "dining", "archive", "dormitory", "conservatory"].includes(room.id);
+      if (isLitRoom) {
         const light = new PointLight(`${room.id}-practical-light`, new Vector3(room.x, 3.6, room.z), scene);
-        light.diffuse = room.id === "relay" ? new Color3(0.73, 0.3, 0.13) : new Color3(0.7, 0.47, 0.23);
-        light.intensity = room.id === "relay" ? 0.68 : 0.4; light.range = 13; staticLights.push(light);
+        light.diffuse = room.id === "relay" ? new Color3(0.78, 0.32, 0.14) : room.id === "archive" ? new Color3(0.38, 0.58, 0.62) : room.id === "conservatory" ? new Color3(0.42, 0.62, 0.52) : new Color3(0.72, 0.50, 0.25);
+        light.intensity = room.id === "relay" ? 0.75 : 0.48; light.range = 14; staticLights.push(light);
       }
     }
 
@@ -235,8 +237,29 @@ export async function createGameScene(engine: Engine, canvas: HTMLCanvasElement)
   }
   for (let i = 0; i < 6; i++) addBox(`path-stone-${i}`, 16 + i * 2.2, 0.05, -26 + (i % 2) * 1.1, 1.6, 0.1, 1, outdoorMat);
 
-  const flashlight = new SpotLight("handheld-beam", new Vector3(0.18, -0.15, 0.25), new Vector3(0, 0, 1), 0.78, 1.4, scene);
-  flashlight.parent = cam; flashlight.range = 35; flashlight.intensity = 3.6; flashlight.diffuse = new Color3(0.96, 0.91, 0.82); flashlight.setEnabled(false);
+  const flashlight = new SpotLight("handheld-beam", new Vector3(0.18, -0.15, 0.25), new Vector3(0, 0, 1), 1.05, 1.15, scene);
+  flashlight.parent = cam; flashlight.range = 44; flashlight.intensity = 5.2; flashlight.diffuse = new Color3(0.98, 0.93, 0.84); flashlight.setEnabled(false);
+
+  const torchFill = new PointLight("torch-fill", new Vector3(0.12, -0.12, 0.35), scene);
+  torchFill.parent = cam; torchFill.range = 16; torchFill.intensity = 0.92; torchFill.diffuse = new Color3(0.95, 0.88, 0.74); torchFill.setEnabled(false);
+
+  const setTorch = (enabled: boolean) => {
+    flashlight.setEnabled(enabled);
+    torchFill.setEnabled(enabled);
+  };
+
+  const dossierMat = makeMat(scene, "classified-dossier-paper", new Color3(0.72, 0.64, 0.45), new Color3(0.25, 0.2, 0.12));
+  for (const doc of LORE_DOCUMENTS) {
+    const folder = MeshBuilder.CreateBox(`doc-${doc.id}`, { width: 0.46, height: 0.04, depth: 0.58 }, scene);
+    folder.position.set(doc.point.x, 0.74, doc.point.z);
+    folder.material = dossierMat;
+    folder.isPickable = false;
+    const seal = MeshBuilder.CreateBox(`doc-seal-${doc.id}`, { width: 0.18, height: 0.045, depth: 0.12 }, scene);
+    seal.position.set(doc.point.x, 0.745, doc.point.z);
+    seal.material = redMat;
+    seal.isPickable = false;
+  }
+
   const handMat = makeMat(scene, "oilskin-glove", new Color3(0.07, 0.075, 0.061));
   const leftHand = MeshBuilder.CreateSphere("left-glove", { diameter: 0.28, segments: 8 }, scene);
   leftHand.parent = cam; leftHand.position = new Vector3(-0.31, -0.36, 0.58); leftHand.scaling = new Vector3(1.25, 0.7, 1.1); leftHand.material = handMat; leftHand.isPickable = false;
@@ -294,7 +317,7 @@ export async function createGameScene(engine: Engine, canvas: HTMLCanvasElement)
       input.requestLock();
       world.start(seed);
       world.flashlight = true;
-      flashlight.setEnabled(true);
+      setTorch(true);
       monster.reset(seed);
       cam.position.set(-17, 1.62, -14);
       cam.rotation.set(0, 0.2, 0);
@@ -304,14 +327,18 @@ export async function createGameScene(engine: Engine, canvas: HTMLCanvasElement)
       gateBars.forEach(bar => bar.setEnabled(true));
       audio.cue(190, 0.2, 0.1);
     },
-    onInteract: () => onlineState?.phase === "playing" ? roomClient.action("interact") : interact(),
+    onInteract: () => {
+      if (world.activeDossier) { world.closeDossier(); audio.pageRustle(); return; }
+      if (onlineState?.phase === "playing") roomClient.action("interact");
+      else interact();
+    },
     onSwitch: index => { currentSlot = index; },
     onHide: () => onlineState?.phase === "playing" ? roomClient.action("hide") : world.tryHide(cameraWorld()),
     onFlashlight: () => {
       if (onlineState?.phase === "playing") roomClient.action("flashlight");
       else {
         world.toggleFlashlight(cameraWorld());
-        flashlight.setEnabled(world.flashlight);
+        setTorch(world.flashlight);
       }
       audio.flashlightSwitch(world.flashlight);
     },
@@ -346,7 +373,7 @@ export async function createGameScene(engine: Engine, canvas: HTMLCanvasElement)
       input.requestLock();
       world.start(state.seed);
       world.flashlight = true;
-      flashlight.setEnabled(true);
+      setTorch(true);
       gateWasOpen = false;
       gateBars.forEach(bar => bar.setEnabled(true));
     }
@@ -357,7 +384,7 @@ export async function createGameScene(engine: Engine, canvas: HTMLCanvasElement)
     const me = state.players.find(player => player.id === roomClient.playerId);
     if (me) {
       world.health = me.health; world.stamina = me.stamina; world.inventory = me.inventory.map(item => ({ ...item })); world.hidden = me.hidden;
-      world.flashlight = me.flashlight; world.battery = me.battery; flashlight.setEnabled(me.flashlight);
+      world.flashlight = me.flashlight; world.battery = me.battery; setTorch(me.flashlight);
       if (Math.hypot(cam.position.x - me.x, cam.position.z - me.z) > 3.0) {
         cam.position.x = me.x;
         cam.position.z = me.z;
@@ -418,8 +445,11 @@ export async function createGameScene(engine: Engine, canvas: HTMLCanvasElement)
   const cameraWorld = () => ({ x: cam.position.x, z: cam.position.z });
   const getNearestInteractable = () => {
     const point = cameraWorld();
+    if (world.activeDossier) return "CLOSE DOSSIER [E / ESC]";
     const item = world.nearestItem(point);
     if (item) return `TAKE ${item.name.toUpperCase()}`;
+    const dossier = world.nearestDossier(point);
+    if (dossier) return `READ DOSSIER · ${dossier.title} [E]`;
     if (Math.hypot(point.x, point.z) < 5.4 && !world.relayReady) return world.relayPuzzleActive ? "ALIGN THE SIGNAL LAMPS · 1 / 2 / 3" : "EXAMINE THE RELAY CONSOLE";
     if (Math.hypot(point.x - 28, point.z + 28) < 5 && !world.gateOpen) return world.relayReady ? "UNLOCK THE IRON GATE" : "THE GATE IS DEAD";
     if (Math.hypot(point.x - 28, point.z + 28) < 5 && world.gateOpen) return "ESCAPE THROUGH THE GATE";
@@ -429,6 +459,17 @@ export async function createGameScene(engine: Engine, canvas: HTMLCanvasElement)
   };
   const interact = () => {
     const point = cameraWorld();
+    if (world.activeDossier) {
+      world.closeDossier();
+      audio.pageRustle();
+      return;
+    }
+    const dossier = world.nearestDossier(point);
+    if (!world.nearestItem(point) && dossier) {
+      world.interact(point);
+      audio.pageRustle();
+      return;
+    }
     const prevCount = world.inventory.length;
     world.interact(point);
     if (world.inventory.length > prevCount) {
@@ -513,7 +554,7 @@ export async function createGameScene(engine: Engine, canvas: HTMLCanvasElement)
     const gameDt = world.demo ? dt * 2 : dt;
     if (world.demo && world.phase === "title" && !demoBooted) {
       demoBooted = true;
-      world.start(seed); world.flashlight = true; flashlight.setEnabled(true); monster.reset(seed);
+      world.start(seed); world.flashlight = true; setTorch(true); monster.reset(seed);
       cam.position.set(-17, 1.62, -14); cam.rotation.set(0, 0.2, 0);
     }
     if (world.phase !== "playing") {
@@ -547,7 +588,7 @@ export async function createGameScene(engine: Engine, canvas: HTMLCanvasElement)
       } else world.update(gameDt, cameraWorld(), isMoving, sprinting);
       if (input.justPressed("interact")) onlineState?.phase === "playing" ? roomClient.action("interact") : interact();
       if (input.justPressed("hide")) onlineState?.phase === "playing" ? roomClient.action("hide") : world.tryHide(cameraWorld());
-      if (input.justPressed("flashlight")) { if (onlineState?.phase === "playing") roomClient.action("flashlight"); else { world.toggleFlashlight(cameraWorld()); flashlight.setEnabled(world.flashlight); } audio.cue(260, 0.05, 0.035); }
+      if (input.justPressed("flashlight")) { if (onlineState?.phase === "playing") roomClient.action("flashlight"); else { world.toggleFlashlight(cameraWorld()); setTorch(world.flashlight); } audio.cue(260, 0.05, 0.035); }
       if (input.justPressed("ping")) onlineState?.phase === "playing" ? roomClient.action("ping") : world.ping(cameraWorld());
       if (input.justPressed("drop")) onlineState?.phase === "playing" ? roomClient.action("drop", currentSlot) : world.dropItem(cameraWorld(), currentSlot);
       if (input.justPressed("use")) onlineState?.phase === "playing" ? roomClient.action("use", currentSlot) : world.useItem(cameraWorld(), currentSlot);
@@ -642,7 +683,7 @@ export async function createGameScene(engine: Engine, canvas: HTMLCanvasElement)
         get demoStage() { return pilotStage; },
         get demoWaypoints() { return pilotQueue.length; },
         get phase() { return world.phase; },
-        start: () => { world.start(seed); world.flashlight = true; flashlight.setEnabled(true); monster.reset(seed); },
+        start: () => { world.start(seed); world.flashlight = true; setTorch(true); monster.reset(seed); },
       },
     });
   }

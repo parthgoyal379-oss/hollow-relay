@@ -135,6 +135,69 @@ export class AudioDirector {
     osc.stop(now + 0.05);
   }
 
+  pageRustle() {
+    if (!this.context || !this.master) return;
+    const now = this.context.currentTime;
+    try {
+      const bufferSize = Math.floor(this.context.sampleRate * 0.16);
+      const buffer = this.context.createBuffer(1, bufferSize, this.context.sampleRate);
+      const data = buffer.getChannelData(0);
+      for (let i = 0; i < bufferSize; i++) {
+        data[i] = (Math.random() * 2 - 1) * Math.sin((i / bufferSize) * Math.PI);
+      }
+      const source = this.context.createBufferSource();
+      source.buffer = buffer;
+      const filter = this.context.createBiquadFilter();
+      filter.type = "bandpass";
+      filter.frequency.setValueAtTime(1400, now);
+      filter.frequency.exponentialRampToValueAtTime(700, now + 0.15);
+      filter.Q.value = 1.8;
+      const gain = this.context.createGain();
+      gain.gain.setValueAtTime(0.08, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.16);
+      source.connect(filter).connect(gain).connect(this.master);
+      source.start(now);
+    } catch {
+      this.cue(800, 0.08, 0.04);
+    }
+  }
+
+  radioStatic() {
+    if (!this.context || !this.master) return;
+    const now = this.context.currentTime;
+    try {
+      const bufferSize = Math.floor(this.context.sampleRate * 0.22);
+      const buffer = this.context.createBuffer(1, bufferSize, this.context.sampleRate);
+      const data = buffer.getChannelData(0);
+      for (let i = 0; i < bufferSize; i++) {
+        data[i] = Math.random() * 2 - 1;
+      }
+      const source = this.context.createBufferSource();
+      source.buffer = buffer;
+      const filter = this.context.createBiquadFilter();
+      filter.type = "bandpass";
+      filter.frequency.setValueAtTime(2200, now);
+      filter.Q.value = 4.0;
+      const gain = this.context.createGain();
+      gain.gain.setValueAtTime(0.10, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.21);
+      source.connect(filter).connect(gain).connect(this.master);
+      source.start(now);
+
+      const osc = this.context.createOscillator();
+      const oscGain = this.context.createGain();
+      osc.type = "sawtooth";
+      osc.frequency.setValueAtTime(1750, now);
+      oscGain.gain.setValueAtTime(0.03, now);
+      oscGain.gain.exponentialRampToValueAtTime(0.001, now + 0.07);
+      osc.connect(oscGain).connect(this.master);
+      osc.start(now);
+      osc.stop(now + 0.08);
+    } catch {
+      this.cue(1200, 0.12, 0.05);
+    }
+  }
+
   chaseStinger() {
     if (!this.context || !this.master) return;
     const now = this.context.currentTime;

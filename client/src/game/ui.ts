@@ -1,6 +1,7 @@
 import type { Action, InputController } from "./input";
 import type { HudSnapshot } from "./types";
 import type { OnlinePlayerState } from "./net";
+import { evaluateEscape, LORE_DOCUMENTS, type LoreDocument } from "./story";
 
 export interface UiCallbacks {
   onLobby: () => void;
@@ -33,9 +34,12 @@ export class GameUI {
   private stickCenter = { x: 0, y: 0 };
   private inventoryIndex = 0;
   private helpOpen = false;
+  private archiveOpen = false;
+  private previewDossier: LoreDocument | null = null;
   private currentPhase: HudSnapshot["phase"] = "title";
   private relayActive = false;
   private lastInventory: HudSnapshot["inventory"] = [];
+  private readDossierIds = new Set<string>();
 
   constructor(private readonly input: InputController, callbacks: UiCallbacks) {
     this.callbacks = callbacks;
@@ -44,8 +48,9 @@ export class GameUI {
     this.root.innerHTML = `
       <div class="game-vignette"></div>
       <header class="hud-top">
-        <div class="brand-lockup"><span class="brand-mark">◉</span><div><strong>THE HOLLOW RELAY</strong><small>BLACKWATER ESTATE · 03:17 AM</small></div></div>
-        <div class="objective-card"><span class="eyebrow">CURRENT TRANSMISSION</span><strong id="objective">Find the relay components</strong><div class="objective-progress"><i id="progress-fill"></i></div></div>
+        <div class="brand-lockup"><span class="brand-mark">◉</span><div><strong>THE HOLLOW RELAY</strong><small>BLACKWATER ESTATE · 1947</small></div></div>
+        <div class="objective-card"><span class="eyebrow">MISSION OBJECTIVE</span><strong id="objective">Find the relay components</strong><div class="objective-progress"><i id="progress-fill"></i></div></div>
+        <button class="dossier-card" data-click="dossier-archive" aria-label="Open Classified Dossiers"><small>CLASSIFIED DOSSIERS</small><strong id="dossier-count">0 / 5</strong><span class="dossier-badge-sub">VIEW ARCHIVE [TAB]</span></button>
         <div class="timer-card"><small>UNTIL DAWN</small><strong id="timer">12:00</strong><span id="phase-label">SIGNAL LOST</span></div>
         <button class="pause-button" data-click="pause" aria-label="Pause">Ⅱ</button>
       </header>
@@ -76,35 +81,129 @@ export class GameUI {
           <button class="mobile-button" data-click="ping">PING</button>
         </div>
       </div>
+
+      <!-- RESIDENT EVIL DOSSIER INSPECTOR -->
+      <section id="dossier-viewer" class="dossier-modal hidden-screen">
+        <div class="dossier-paper">
+          <div class="dossier-stamp" id="dossier-stamp">TOP SECRET</div>
+          <div class="dossier-header">
+            <span class="dossier-eyebrow" id="dossier-eyebrow">OFFICE OF NAVAL RESEARCH — DIVISION 9</span>
+            <h2 id="dossier-title">MEMORANDUM: FREQUENCY 734.2 kHz</h2>
+            <div class="dossier-meta">
+              <span id="dossier-date">OCTOBER 14, 1947</span>
+              <span id="dossier-loc">BLACKWATER ESTATE</span>
+            </div>
+          </div>
+          <div class="dossier-body" id="dossier-body"></div>
+          <div class="dossier-footer" id="dossier-footer"></div>
+          <div class="dossier-actions">
+            <button class="primary-button" data-click="close-dossier">CLOSE DOSSIER <span>[E / ESC]</span></button>
+          </div>
+        </div>
+      </section>
+
+      <!-- DOSSIER ARCHIVES MODAL -->
+      <section id="dossier-archive-screen" class="phase-screen hidden-screen">
+        <div class="phase-frame archive-frame">
+          <button class="back-button" data-click="close-archive">← RETURN TO THE HALL</button>
+          <span class="eyebrow">BLACKWATER INCIDENT RECORDS</span>
+          <h2>CASE FILE<br><em>ARCHIVES</em></h2>
+          <p class="title-copy">Classified documents, medical logs, and telegraph transmissions uncovered within the estate.</p>
+          <div class="dossier-list" id="dossier-archive-list"></div>
+          <button class="primary-button" data-click="close-archive">RETURN TO SEARCH <span>↗</span></button>
+        </div>
+      </section>
+
+      <!-- TITLE SCREEN -->
       <section id="title-screen" class="phase-screen">
         <div class="phase-frame">
-          <span class="eyebrow">A BLACKWATER ESTATE STORY</span>
+          <span class="eyebrow">A BIO-ACOUSTIC SURVIVAL HORROR EXPERIENCE</span>
           <h1>THE<br><em>HOLLOW</em><br>RELAY</h1>
-          <p class="title-copy">The storm erased the road. Something in the house still answers the radio.</p>
+          <p class="title-copy">October 1947. Project Resonance tuned the coastal receiver to 734.2 kHz. What answered reshaped human bone into an acoustic predator. Chief Engineer Cole hunts in the dark. Silence is your only weapon.</p>
           <div class="title-rule"></div>
           <div class="title-actions">
             <button class="primary-button" data-click="lobby">ENTER THE ESTATE <span>↗</span></button>
             <button class="text-button coop-entry" data-click="coop">ONLINE CO-OP · 1–4 SURVIVORS</button>
             <button class="text-button" data-click="help">HOW TO SURVIVE</button>
           </div>
-          <div class="control-note">WASD MOVE <i>·</i> MOUSE LOOK <i>·</i> E INTERACT <i>·</i> SHIFT RUN <i>·</i> C CROUCH · H HIDE</div>
-          <div class="edition">LOCAL STORY DEMO <span>—</span> BUILD 0.1</div>
+          <div class="control-note">WASD MOVE <i>·</i> MOUSE LOOK <i>·</i> E INTERACT / READ <i>·</i> SHIFT RUN <i>·</i> C CROUCH <i>·</i> H HIDE <i>·</i> TAB ARCHIVE</div>
+          <div class="edition">CASE FILE 1947-B <span>—</span> RESIDENT SURVIVAL CUT</div>
         </div>
         <div class="title-image"></div>
       </section>
+
+      <!-- LOBBY SCREEN -->
       <section id="lobby-screen" class="phase-screen hidden-screen">
         <div class="phase-frame lobby-frame">
           <button class="back-button" data-click="back">← BACK</button>
-          <span class="eyebrow">PREPARE YOURSELF</span><h2>THE LAST<br><em>TRANSMISSION</em></h2>
-          <p class="title-copy">A solo field recording from Blackwater. Find three relay parts, align the signal, and reach the iron gate before dawn.</p>
-          <div class="lobby-checklist"><span><i>01</i> SCAVENGE THE ESTATE <b>3 PARTS</b></span><span><i>02</i> RESTORE THE RELAY <b>3-LAMP SEQUENCE</b></span><span><i>03</i> OPEN THE GATE <b>KEY + FUEL</b></span></div>
+          <span class="eyebrow">PREPARE YOURSELF</span><h2>OPERATION<br><em>BLACKWATER</em></h2>
+          <p class="title-copy">A solo survival run through the infected estate. Recover Eleanor Cross's three relay components, calibrate the transmitter sequence, and escape through the hydraulic gate before dawn.</p>
+          <div class="lobby-checklist">
+            <span><i>01</i> RECOVER 3 RELAY MODULES <b>FUSE · SPOOL · VALVE</b></span>
+            <span><i>02</i> MATCH TRANSMISSION CODES <b>3-LAMP SEQUENCE</b></span>
+            <span><i>03</i> BREACH THE IRON GATE <b>GATE KEY + KEROSENE FUEL</b></span>
+          </div>
           <button class="primary-button" data-click="start">BEGIN THE SHIFT <span>↗</span></button>
-          <p class="lobby-footnote">One survivor · Local deterministic match · 15 minute shift</p>
+          <p class="lobby-footnote">One survivor · Local deterministic simulation · 15 minute countdown</p>
         </div>
       </section>
-      <section id="pause-screen" class="phase-screen hidden-screen"><div class="phase-frame pause-frame"><span class="eyebrow">THE HOUSE IS STILL AWAKE</span><h2>HOLD YOUR<br><em>BREATH</em></h2><button class="primary-button" data-click="resume">RETURN TO THE HALL <span>↗</span></button><button class="text-button" data-click="menu">LEAVE SHIFT</button><p class="lobby-footnote">Settings: mouse look sensitivity is tuned for a steady turn. Reduce flashing is enabled.</p></div></section>
-      <section id="results-screen" class="phase-screen hidden-screen"><div class="phase-frame results-frame"><span class="eyebrow" id="result-kicker">FIELD REPORT · BLACKWATER</span><h2 id="result-title">THE NIGHT<br><em>REMAINS</em></h2><p class="title-copy" id="result-copy"></p><div class="results-stats"><span>TIME IN ESTATE <b id="result-time">00:00</b></span><span>RELAY STATUS <b id="result-relay">LOST</b></span><span>EXTRACTED <b id="result-escapes">0</b></span><span>ITEMS CARRIED <b id="result-items">0</b></span></div><button class="primary-button" data-click="again">RECORD ANOTHER SHIFT <span>↗</span></button><button class="text-button" data-click="menu">RETURN TO TITLE</button></div></section>
-      <section id="help-screen" class="phase-screen hidden-screen"><div class="phase-frame help-frame"><button class="back-button" data-click="close-help">← BACK</button><span class="eyebrow">FIELD NOTES</span><h2>DON'T LET IT<br><em>HEAR YOU</em></h2><div class="help-grid"><span><b>MOVE</b> WASD / left stick</span><span><b>LOOK</b> mouse / drag screen</span><span><b>INTERACT</b> E / USE</span><span><b>RUN</b> hold Shift / RUN</span><span><b>CROUCH / HIDE</b> C crouch · H hide near cover</span><span><b>TOOLS</b> F lamp · G ping · Q drop · Space use</span><span><b>RELAY</b> 1 / 2 / 3 lamps in order</span></div><p class="title-copy">Running and metal machinery carry through walls. Break line of sight, find a wardrobe or the dark beneath a table, and wait for the search to pass. The Listener follows evidence, not your exact position.</p><button class="primary-button" data-click="lobby">UNDERSTOOD <span>↗</span></button></div></section>
+
+      <!-- PAUSE SCREEN -->
+      <section id="pause-screen" class="phase-screen hidden-screen">
+        <div class="phase-frame pause-frame">
+          <span class="eyebrow">THE HOUSE IS STILL AWAKE</span>
+          <h2>HOLD YOUR<br><em>BREATH</em></h2>
+          <button class="primary-button" data-click="resume">RETURN TO THE HALL <span>↗</span></button>
+          <button class="text-button" data-click="menu">LEAVE SHIFT</button>
+          <p class="lobby-footnote">Mouse look sensitivity is tuned for precise navigation. Torch beam and peripheral bounce enabled.</p>
+        </div>
+      </section>
+
+      <!-- RESULTS SCREEN -->
+      <section id="results-screen" class="phase-screen hidden-screen">
+        <div class="phase-frame results-frame">
+          <span class="eyebrow" id="result-kicker">INCIDENT EVALUATION REPORT · BLACKWATER ESTATE</span>
+          <h2 id="result-title">THE NIGHT<br><em>REMAINS</em></h2>
+          <div class="rank-display">
+            <div class="rank-badge" id="rank-badge">D</div>
+            <div class="rank-info">
+              <strong id="rank-comment">THE TRANSMISSION PROPAGATES</strong>
+              <span id="rank-score">0 / 5 DOSSIERS DISCOVERED</span>
+            </div>
+          </div>
+          <p class="title-copy" id="result-copy"></p>
+          <div class="results-stats">
+            <span>TIME IN ESTATE <b id="result-time">00:00</b></span>
+            <span>RELAY STATUS <b id="result-relay">LOST</b></span>
+            <span>EXTRACTED <b id="result-escapes">0</b></span>
+            <span>SURVIVAL STATUS <b id="result-health">100%</b></span>
+          </div>
+          <div class="epilogue-box" id="epilogue-box"></div>
+          <button class="primary-button" data-click="again">RECORD ANOTHER SHIFT <span>↗</span></button>
+          <button class="text-button" data-click="menu">RETURN TO TITLE</button>
+        </div>
+      </section>
+
+      <!-- HELP SCREEN -->
+      <section id="help-screen" class="phase-screen hidden-screen">
+        <div class="phase-frame help-frame">
+          <button class="back-button" data-click="close-help">← BACK</button>
+          <span class="eyebrow">FIELD SURVIVAL NOTES</span>
+          <h2>DON'T LET IT<br><em>HEAR YOU</em></h2>
+          <div class="help-grid">
+            <span><b>MOVE</b> WASD / left stick</span>
+            <span><b>LOOK</b> mouse / drag screen</span>
+            <span><b>INTERACT</b> E / USE / READ</span>
+            <span><b>RUN</b> hold Shift / RUN</span>
+            <span><b>CROUCH / HIDE</b> C crouch · H hide in wardrobes</span>
+            <span><b>EQUIPMENT</b> F torch · G ping · Q drop · Space use</span>
+            <span><b>ARCHIVES</b> TAB open classified case files</span>
+            <span><b>RELAY</b> 1 / 2 / 3 match signal lamps</span>
+          </div>
+          <p class="title-copy">Chief Engineer Cole possesses no sight. He hunts by bone resonance and floorboard vibrations. Walk slowly, crouch when entering unmapped rooms, and hide inside wardrobes before he crosses the threshold.</p>
+          <button class="primary-button" data-click="lobby">UNDERSTOOD <span>↗</span></button>
+        </div>
+      </section>
     `;
     document.body.appendChild(this.root);
     this.bind();
@@ -131,7 +230,34 @@ export class GameUI {
       else if (action === "resume") { this.callbacks.onPause(); }
       else if (action === "help") { this.helpOpen = true; this.showOnly("help-screen"); }
       else if (action === "close-help") { this.helpOpen = false; this.showOnly("title-screen"); }
+      else if (action === "close-dossier") {
+        this.previewDossier = null;
+        this.callbacks.onInteract();
+        const viewer = this.root.querySelector<HTMLElement>("#dossier-viewer");
+        viewer?.classList.add("hidden-screen");
+      }
+      else if (action === "dossier-archive") {
+        this.archiveOpen = true;
+        this.showOnly("dossier-archive-screen");
+        this.renderArchiveList();
+      }
+      else if (action === "close-archive") {
+        this.archiveOpen = false;
+        this.showOnly("");
+      }
     };
+
+    const docClick = (event: Event) => {
+      const target = (event.target as HTMLElement).closest<HTMLElement>("[data-read-doc]");
+      if (!target) return;
+      const docId = target.dataset.readDoc;
+      const doc = LORE_DOCUMENTS.find(d => d.id === docId);
+      if (doc) {
+        this.previewDossier = doc;
+        this.showDossier(doc);
+      }
+    };
+
     const down = (event: Event) => {
       const target = (event.target as HTMLElement).closest<HTMLElement>("[data-action]");
       if (target?.dataset.action) { event.preventDefault(); this.callbacks.onAction(target.dataset.action as Action, true); target.classList.add("pressed"); }
@@ -156,7 +282,34 @@ export class GameUI {
       const target = (event.target as HTMLElement).closest<HTMLButtonElement>("[data-callout]");
       if (target?.dataset.callout) this.callbacks.onCallout(target.dataset.callout);
     };
-    const relayKey = (event: KeyboardEvent) => {
+    const keyHandler = (event: KeyboardEvent) => {
+      if (event.code === "Tab" && this.currentPhase === "playing") {
+        event.preventDefault();
+        this.archiveOpen = !this.archiveOpen;
+        if (this.archiveOpen) {
+          this.showOnly("dossier-archive-screen");
+          this.renderArchiveList();
+        } else {
+          this.showOnly("");
+        }
+        return;
+      }
+      if (event.code === "Escape") {
+        const viewer = this.root.querySelector<HTMLElement>("#dossier-viewer");
+        if (viewer && !viewer.classList.contains("hidden-screen")) {
+          event.preventDefault();
+          this.previewDossier = null;
+          this.callbacks.onInteract();
+          viewer.classList.add("hidden-screen");
+          return;
+        }
+        if (this.archiveOpen) {
+          event.preventDefault();
+          this.archiveOpen = false;
+          this.showOnly("");
+          return;
+        }
+      }
       if (this.currentPhase !== "playing" || !/^Digit[1-4]$/.test(event.code)) return;
       event.preventDefault();
       const value = Number(event.code.slice(-1));
@@ -167,20 +320,31 @@ export class GameUI {
         this.renderInventory(this.lastInventory, this.inventoryIndex);
       }
     };
+
     this.root.addEventListener("click", click);
+    this.root.addEventListener("click", docClick);
     this.root.addEventListener("pointerdown", down);
     window.addEventListener("pointerup", up);
     this.root.addEventListener("click", inventory);
     this.root.addEventListener("click", relaySwitch);
     this.root.addEventListener("click", callout);
-    window.addEventListener("keydown", relayKey);
-    this.cleanup.push(() => this.root.removeEventListener("click", click), () => this.root.removeEventListener("pointerdown", down), () => window.removeEventListener("pointerup", up), () => this.root.removeEventListener("click", inventory), () => this.root.removeEventListener("click", relaySwitch), () => this.root.removeEventListener("click", callout), () => window.removeEventListener("keydown", relayKey));
+    window.addEventListener("keydown", keyHandler);
+    this.cleanup.push(
+      () => this.root.removeEventListener("click", click),
+      () => this.root.removeEventListener("click", docClick),
+      () => this.root.removeEventListener("pointerdown", down),
+      () => window.removeEventListener("pointerup", up),
+      () => this.root.removeEventListener("click", inventory),
+      () => this.root.removeEventListener("click", relaySwitch),
+      () => this.root.removeEventListener("click", callout),
+      () => window.removeEventListener("keydown", keyHandler)
+    );
+
     const stick = this.root.querySelector<HTMLElement>("[data-control='joystick']")!;
     const updateStick = (event: PointerEvent) => {
       if (this.stickPointer !== event.pointerId) return;
       const dx = event.clientX - this.stickCenter.x;
       const dy = event.clientY - this.stickCenter.y;
-      const length = Math.max(38, Math.hypot(dx, dy));
       const x = Math.max(-1, Math.min(1, dx / 44));
       const y = Math.max(-1, Math.min(1, dy / 44));
       const knob = this.root.querySelector<HTMLElement>("#stick-knob");
@@ -200,14 +364,71 @@ export class GameUI {
     stick.addEventListener("pointermove", updateStick);
     stick.addEventListener("pointerup", endStick);
     stick.addEventListener("pointercancel", endStick);
-    this.cleanup.push(() => stick.removeEventListener("pointerdown", startStick), () => stick.removeEventListener("pointermove", updateStick), () => stick.removeEventListener("pointerup", endStick), () => stick.removeEventListener("pointercancel", endStick));
+    this.cleanup.push(
+      () => stick.removeEventListener("pointerdown", startStick),
+      () => stick.removeEventListener("pointermove", updateStick),
+      () => stick.removeEventListener("pointerup", endStick),
+      () => stick.removeEventListener("pointercancel", endStick)
+    );
   }
 
   private showOnly(id: string) {
-    this.root.querySelectorAll<HTMLElement>(".phase-screen").forEach(node => node.classList.add("hidden-screen"));
+    this.root.querySelectorAll<HTMLElement>(".phase-screen").forEach(node => {
+      if (node.id !== "dossier-viewer") node.classList.add("hidden-screen");
+    });
     if (!id) return;
     const node = this.root.querySelector<HTMLElement>(`#${id}`);
     if (node) node.classList.remove("hidden-screen");
+  }
+
+  showDossier(doc: LoreDocument) {
+    const viewer = this.root.querySelector<HTMLElement>("#dossier-viewer");
+    if (!viewer) return;
+    const stamp = viewer.querySelector<HTMLElement>("#dossier-stamp");
+    const eyebrow = viewer.querySelector<HTMLElement>("#dossier-eyebrow");
+    const title = viewer.querySelector<HTMLElement>("#dossier-title");
+    const date = viewer.querySelector<HTMLElement>("#dossier-date");
+    const loc = viewer.querySelector<HTMLElement>("#dossier-loc");
+    const body = viewer.querySelector<HTMLElement>("#dossier-body");
+    const footer = viewer.querySelector<HTMLElement>("#dossier-footer");
+
+    if (stamp) stamp.textContent = doc.classifiedStamp || "CLASSIFIED";
+    if (eyebrow) eyebrow.textContent = doc.subtitle;
+    if (title) title.textContent = doc.title;
+    if (date) date.textContent = doc.date;
+    if (loc) loc.textContent = `${doc.roomName} · BLACKWATER`;
+    if (body) body.innerHTML = doc.lines.map(line => `<p>${this.escapeText(line)}</p>`).join("");
+    if (footer) footer.textContent = doc.footer || "";
+
+    viewer.classList.remove("hidden-screen");
+  }
+
+  renderArchiveList() {
+    const list = this.root.querySelector<HTMLElement>("#dossier-archive-list");
+    if (!list) return;
+    list.innerHTML = LORE_DOCUMENTS.map(doc => {
+      const isUnlocked = this.readDossierIds.has(doc.id);
+      if (isUnlocked) {
+        return `
+          <button class="dossier-item unlocked" data-read-doc="${doc.id}">
+            <div>
+              <strong>${this.escapeText(doc.title)}</strong>
+              <small>${this.escapeText(doc.subtitle)} · ${doc.date}</small>
+            </div>
+            <span>READ ↗</span>
+          </button>
+        `;
+      }
+      return `
+        <div class="dossier-item locked">
+          <div>
+            <strong>[CLASSIFIED RECORD — ENCRYPTED]</strong>
+            <small>Discovered in ${doc.roomName}</small>
+          </div>
+          <span>LOCKED</span>
+        </div>
+      `;
+    }).join("");
   }
 
   setPrompt(text: string) {
@@ -247,6 +468,7 @@ export class GameUI {
     this.root.dataset.phase = phase;
     const chromeOff = phase !== "playing";
     this.root.querySelectorAll<HTMLElement>(".hud-top, .hud-bottom, .room-name, .notice, .interaction-prompt, .reticle, .mobile-controls, .relay-panel, .coop-comms").forEach(node => node.classList.toggle("ui-off", chromeOff));
+    
     if (phase !== this.lastPhase) {
       this.lastPhase = phase;
       if (phase === "playing") this.showOnly("");
@@ -254,6 +476,7 @@ export class GameUI {
       if (phase === "results") this.showOnly("results-screen");
       if (phase === "title") this.showOnly("title-screen");
     }
+
     const $ = <T extends HTMLElement>(selector: string) => this.root.querySelector<T>(selector);
     const vignette = $(".game-vignette");
     if (vignette) {
@@ -264,8 +487,19 @@ export class GameUI {
       vignette.classList.toggle("stealth-hidden", snapshot.hidden && phase === "playing");
       vignette.classList.toggle("health-critical", snapshot.health < 35 && phase === "playing");
     }
+
+    // Dossier inspector synchronization
+    if (snapshot.activeDossier) {
+      this.readDossierIds.add(snapshot.activeDossier.id);
+      this.showDossier(snapshot.activeDossier);
+    } else if (!this.previewDossier) {
+      const viewer = $("#dossier-viewer");
+      viewer?.classList.add("hidden-screen");
+    }
+
     const timer = $("#timer"); if (timer) timer.textContent = fmt(snapshot.remaining);
     const objective = $("#objective"); if (objective) objective.textContent = snapshot.objective;
+    const dossierCount = $("#dossier-count"); if (dossierCount) dossierCount.textContent = `${snapshot.dossiersRead} / ${snapshot.totalDossiers}`;
     const progress = $("#progress-fill"); if (progress) progress.style.width = `${snapshot.relayReady ? snapshot.gateOpen ? 100 : 70 : Math.min(64, snapshot.relayParts * 14 + (snapshot.relayReady ? 25 : 0))}%`;
     const stamina = $("#stamina-bar"); if (stamina) stamina.style.width = `${snapshot.stamina}%`;
     const health = $("#health-bar"); if (health) health.style.width = `${snapshot.health}%`;
@@ -286,14 +520,25 @@ export class GameUI {
     const finalAt = snapshot.demo ? 24 : 180;
     const phaseLabel = $("#phase-label"); if (phaseLabel) phaseLabel.textContent = snapshot.remaining < criticalAt ? "CRITICAL" : snapshot.remaining < finalAt ? "FINAL PHASE" : "SIGNAL LOST";
     this.renderInventory(snapshot.inventory, currentSlot);
+
     if (phase === "results") {
       const won = snapshot.escapes > 0;
+      const evaluation = evaluateEscape(snapshot.elapsed, snapshot.health, snapshot.dossiersRead, snapshot.totalDossiers, won);
       const t = $("#result-title"); if (t) t.innerHTML = won ? "THE SIGNAL<br><em>GOT OUT</em>" : "THE NIGHT<br><em>REMAINS</em>";
-      const copy = $("#result-copy"); if (copy) copy.textContent = won ? "A weak carrier tone reaches the coast. You make it past the iron gate." : "The relay falls quiet. Somewhere in Blackwater, the Listener returns to its rounds.";
+      const kicker = $("#result-kicker"); if (kicker) kicker.textContent = evaluation.title;
+      const badge = $("#rank-badge");
+      if (badge) {
+        badge.textContent = evaluation.rank;
+        badge.className = `rank-badge rank-${evaluation.rank}`;
+      }
+      const rankComment = $("#rank-comment"); if (rankComment) rankComment.textContent = evaluation.rankComment;
+      const rankScore = $("#rank-score"); if (rankScore) rankScore.textContent = evaluation.loreScore;
+      const copy = $("#result-copy"); if (copy) copy.textContent = evaluation.survivalNotes;
       const tm = $("#result-time"); if (tm) tm.textContent = fmt(snapshot.elapsed);
       const relay = $("#result-relay"); if (relay) relay.textContent = snapshot.relayReady ? "RESTORED" : "DARK";
       const escapes = $("#result-escapes"); if (escapes) escapes.textContent = won ? "1" : "0";
-      const items = $("#result-items"); if (items) items.textContent = totalItems.toString();
+      const hp = $("#result-health"); if (hp) hp.textContent = `${Math.round(snapshot.health)}%`;
+      const epilogue = $("#epilogue-box"); if (epilogue) epilogue.textContent = evaluation.epilogue;
     }
   }
 

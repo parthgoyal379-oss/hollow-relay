@@ -1,10 +1,11 @@
 import { rooms, spawnPoints, roomAt } from "./map";
 import type { HudSnapshot, ItemId, NoiseEvent, WorldItem, WorldPoint } from "./types";
+import { LORE_DOCUMENTS, type LoreDocument } from "./story";
 
 const itemNames: Record<ItemId, string> = {
-  fuse: "Ceramic Fuse", spool: "Copper Spool", valve: "Brass Valve",
-  gateKey: "Gate Key", fuelCell: "Fuel Canister", medkit: "Field Dressing",
-  noiseMaker: "Clockwork Decoy", battery: "Flashlight Cell",
+  fuse: "Silver Vacuum Tube", spool: "Copper Induction Spool", valve: "High-Pressure Valve",
+  gateKey: "Blackwater Gate Key", fuelCell: "Military Kerosene Can", medkit: "Emergency First Aid Spray",
+  noiseMaker: "Clockwork Metronome Decoy", battery: "Heavy Dry Cell",
 };
 
 function seeded(seed: number) {
@@ -34,6 +35,8 @@ export class GameWorld {
   relayPuzzleActive = false;
   puzzleIndex = 0;
   puzzlePattern = [1, 3, 2];
+  readDossiers: Set<string> = new Set();
+  activeDossier: LoreDocument | null = null;
   private random = seeded(Date.now());
   private noticeTimer = 6;
   private damageCooldown = 0;
@@ -69,13 +72,15 @@ export class GameWorld {
     this.mapSeed = seed;
     this.random = seeded(seed);
     this.puzzlePattern = this.random() > 0.5 ? [2, 1, 3] : [1, 3, 2];
+    this.readDossiers.clear();
+    this.activeDossier = null;
     const pool = [...spawnPoints].sort(() => this.random() - 0.5);
     const types: ItemId[] = ["fuse", "spool", "valve", "gateKey", "fuelCell", "medkit", "noiseMaker", "battery"];
     this.items = types.map((type, index) => {
       const point = pool[index % pool.length]!;
       return { id: `${type}-${index}`, type, name: itemNames[type], point: { x: point.x + (this.random() - 0.5) * 2, z: point.z + (this.random() - 0.5) * 2 }, collected: false };
     });
-    this.say(`Shift ${String((seed >>> 0) % 90 + 10)}: restore the relay and reach the gate.`);
+    this.say(`BIO-ACOUSTIC HAZARD // BLACKWATER ESTATE · Shift ${String((seed >>> 0) % 90 + 10)}`);
   }
 
   update(dt: number, point: WorldPoint, moving: boolean, sprinting: boolean) {
@@ -118,8 +123,21 @@ export class GameWorld {
       .filter(entry => entry.distance <= maxDistance).sort((a, b) => a.distance - b.distance)[0]?.item;
   }
 
+  nearestDossier(point: WorldPoint, maxDistance = 2.8) {
+    return LORE_DOCUMENTS.map(doc => ({ doc, distance: Math.hypot(doc.point.x - point.x, doc.point.z - point.z) }))
+      .filter(entry => entry.distance <= maxDistance).sort((a, b) => a.distance - b.distance)[0]?.doc;
+  }
+
+  closeDossier() {
+    this.activeDossier = null;
+  }
+
   interact(point: WorldPoint) {
     if (this.phase !== "playing") return;
+    if (this.activeDossier) {
+      this.activeDossier = null;
+      return;
+    }
     if (this.hidden) { this.hidden = false; this.say("You ease out of the hiding place."); this.makeNoise(point, 0.05, "movement"); return; }
     const item = this.nearestItem(point);
     if (item) {
@@ -127,7 +145,14 @@ export class GameWorld {
       item.collected = true;
       this.inventory.push({ id: item.type, name: item.name });
       this.makeNoise(point, 0.14, "item picked up");
-      this.say(`Taken: ${item.name}.`);
+      this.say(`Secured: ${item.name}.`);
+      return;
+    }
+    const dossier = this.nearestDossier(point);
+    if (dossier) {
+      this.activeDossier = dossier;
+      this.readDossiers.add(dossier.id);
+      this.say(`Archived: ${dossier.title}`);
       return;
     }
     const nearRelay = Math.hypot(point.x, point.z) < 5.4;
@@ -250,6 +275,9 @@ export class GameWorld {
       relayPuzzleActive: this.relayPuzzleActive, puzzlePattern: [...this.puzzlePattern], puzzleIndex: this.puzzleIndex,
       hidden: this.hidden, monsterMode: this.monsterMode, monsterDistance: this.monsterDistance,
       notice: this.noticeTimer > 0 ? this.notice : "", room: "", escapes: this.escapes, demo: this.demo,
+      dossiersRead: this.readDossiers.size,
+      totalDossiers: LORE_DOCUMENTS.length,
+      activeDossier: this.activeDossier,
     };
   }
 }
