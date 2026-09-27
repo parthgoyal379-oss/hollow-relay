@@ -169,6 +169,59 @@ export async function createGameScene(engine: Engine, canvas: HTMLCanvasElement)
     }
   }
 
+  // Build enclosed corridors between adjacent rooms to eliminate empty voids and falling out
+  const visitedPairs = new Set<string>();
+  for (const room of rooms) {
+    for (const neighborId of room.neighbors) {
+      const pairKey = [room.id, neighborId].sort().join("--");
+      if (visitedPairs.has(pairKey)) continue;
+      visitedPairs.add(pairKey);
+
+      const n = roomById.get(neighborId);
+      if (!n) continue;
+
+      const isOutside = (room.id === "yard" || room.id === "gate") && (n.id === "yard" || n.id === "gate");
+      const corridorFloorMat = isOutside ? outdoorMat : floorMaterial;
+      const corridorCeilMat = isOutside ? outdoorMat : darkWood;
+      const doorSpan = 3.35;
+      const halfDoor = doorSpan / 2;
+
+      if (room.row === n.row) {
+        // Horizontal connection (East - West)
+        const leftRoom = room.col < n.col ? room : n;
+        const rightRoom = room.col < n.col ? n : room;
+        const gapX = (leftRoom.x + 6 + rightRoom.x - 6) / 2;
+        const gapLen = 2.0;
+        const z = room.z;
+
+        const cFloor = MeshBuilder.CreateGround(`corridor-floor-${pairKey}`, { width: gapLen, height: doorSpan, subdivisions: 1 }, scene);
+        cFloor.position.set(gapX, 0, z); cFloor.material = corridorFloorMat; cFloor.isPickable = false;
+
+        const cCeil = addBox(`corridor-ceiling-${pairKey}`, gapX, 4.22, z, gapLen, 0.18, doorSpan, corridorCeilMat);
+        cCeil.isPickable = false;
+
+        addWall(gapX, z + halfDoor, gapLen, 0.34);
+        addWall(gapX, z - halfDoor, gapLen, 0.34);
+      } else if (room.col === n.col) {
+        // Vertical connection (North - South)
+        const bottomRoom = room.row < n.row ? room : n;
+        const topRoom = room.row < n.row ? n : room;
+        const gapZ = (bottomRoom.z + 6 + topRoom.z - 6) / 2;
+        const gapLen = 2.0;
+        const x = room.x;
+
+        const cFloor = MeshBuilder.CreateGround(`corridor-floor-${pairKey}`, { width: doorSpan, height: gapLen, subdivisions: 1 }, scene);
+        cFloor.position.set(x, 0, gapZ); cFloor.material = corridorFloorMat; cFloor.isPickable = false;
+
+        const cCeil = addBox(`corridor-ceiling-${pairKey}`, x, 4.22, gapZ, doorSpan, 0.18, gapLen, corridorCeilMat);
+        cCeil.isPickable = false;
+
+        addWall(x + halfDoor, gapZ, 0.34, gapLen);
+        addWall(x - halfDoor, gapZ, 0.34, gapLen);
+      }
+    }
+  }
+
   // A rain-blackened outer path and a broken perimeter are visible through the open yard.
   for (let i = 0; i < 12; i++) {
     const x = 18 + Math.sin(i * 2.3) * 10;
@@ -182,8 +235,8 @@ export async function createGameScene(engine: Engine, canvas: HTMLCanvasElement)
   }
   for (let i = 0; i < 6; i++) addBox(`path-stone-${i}`, 16 + i * 2.2, 0.05, -26 + (i % 2) * 1.1, 1.6, 0.1, 1, outdoorMat);
 
-  const flashlight = new SpotLight("handheld-beam", cam.position, new Vector3(0, 0, 1), 0.72, 1.2, scene);
-  flashlight.parent = cam; flashlight.position = new Vector3(0, 0, 0.25); flashlight.range = 32; flashlight.intensity = 3.3; flashlight.setEnabled(false);
+  const flashlight = new SpotLight("handheld-beam", new Vector3(0.18, -0.15, 0.25), new Vector3(0, 0, 1), 0.78, 1.4, scene);
+  flashlight.parent = cam; flashlight.range = 35; flashlight.intensity = 3.6; flashlight.diffuse = new Color3(0.96, 0.91, 0.82); flashlight.setEnabled(false);
   const handMat = makeMat(scene, "oilskin-glove", new Color3(0.07, 0.075, 0.061));
   const leftHand = MeshBuilder.CreateSphere("left-glove", { diameter: 0.28, segments: 8 }, scene);
   leftHand.parent = cam; leftHand.position = new Vector3(-0.31, -0.36, 0.58); leftHand.scaling = new Vector3(1.25, 0.7, 1.1); leftHand.material = handMat; leftHand.isPickable = false;
@@ -236,11 +289,32 @@ export async function createGameScene(engine: Engine, canvas: HTMLCanvasElement)
   const ui = new GameUI(input, {
     onLobby: () => undefined,
     onCoop: () => coopUI.open(),
-    onStart: () => { audio.unlock(); world.start(seed); world.flashlight = true; flashlight.setEnabled(true); monster.reset(seed); cam.position.set(-17, 1.62, -14); cam.rotation.set(0, 0.2, 0); currentSlot = 0; demoStarted = false; gateWasOpen = false; gateBars.forEach(bar => bar.setEnabled(true)); audio.cue(190, 0.2, 0.1); },
+    onStart: () => {
+      audio.unlock();
+      input.requestLock();
+      world.start(seed);
+      world.flashlight = true;
+      flashlight.setEnabled(true);
+      monster.reset(seed);
+      cam.position.set(-17, 1.62, -14);
+      cam.rotation.set(0, 0.2, 0);
+      currentSlot = 0;
+      demoStarted = false;
+      gateWasOpen = false;
+      gateBars.forEach(bar => bar.setEnabled(true));
+      audio.cue(190, 0.2, 0.1);
+    },
     onInteract: () => onlineState?.phase === "playing" ? roomClient.action("interact") : interact(),
     onSwitch: index => { currentSlot = index; },
     onHide: () => onlineState?.phase === "playing" ? roomClient.action("hide") : world.tryHide(cameraWorld()),
-    onFlashlight: () => { if (onlineState?.phase === "playing") roomClient.action("flashlight"); else { world.toggleFlashlight(cameraWorld()); flashlight.setEnabled(world.flashlight); } audio.cue(260, 0.05, 0.035); },
+    onFlashlight: () => {
+      if (onlineState?.phase === "playing") roomClient.action("flashlight");
+      else {
+        world.toggleFlashlight(cameraWorld());
+        flashlight.setEnabled(world.flashlight);
+      }
+      audio.flashlightSwitch(world.flashlight);
+    },
     onPing: () => { if (onlineState?.phase === "playing") roomClient.action("ping"); else world.ping(cameraWorld()); audio.cue(320, 0.1, 0.05); },
     onDrop: () => onlineState?.phase === "playing" ? roomClient.action("drop", currentSlot) : world.dropItem(cameraWorld(), currentSlot),
     onUse: () => onlineState?.phase === "playing" ? roomClient.action("use", currentSlot) : world.useItem(cameraWorld(), currentSlot),
@@ -249,7 +323,7 @@ export async function createGameScene(engine: Engine, canvas: HTMLCanvasElement)
     onPause: () => {
       if (onlineState?.phase === "playing") { world.say("A shared shift cannot pause. Leave the room to step away."); return; }
       if (world.phase === "playing") world.phase = "paused";
-      else if (world.phase === "paused") world.phase = "playing";
+      else if (world.phase === "paused") { world.phase = "playing"; input.requestLock(); }
       else if (world.phase === "title") return;
       else if (world.phase === "results") world.phase = "title";
     },
@@ -267,7 +341,15 @@ export async function createGameScene(engine: Engine, canvas: HTMLCanvasElement)
     onlineState = state;
     coopUI.showRoom(state, roomClient.playerId);
     const wasPlaying = world.phase === "playing" || world.phase === "paused";
-    if (state.phase === "playing" && !wasPlaying) { world.start(state.seed); world.flashlight = true; gateWasOpen = false; gateBars.forEach(bar => bar.setEnabled(true)); }
+    if (state.phase === "playing" && !wasPlaying) {
+      audio.unlock();
+      input.requestLock();
+      world.start(state.seed);
+      world.flashlight = true;
+      flashlight.setEnabled(true);
+      gateWasOpen = false;
+      gateBars.forEach(bar => bar.setEnabled(true));
+    }
     if (world.phase !== "paused") world.phase = state.phase === "playing" ? "playing" : state.phase === "results" ? "results" : "title";
     world.elapsed = state.elapsed; world.items = state.items;
     world.relayReady = state.relayReady; world.relayPuzzleActive = state.relayPuzzleActive; world.puzzlePattern = state.puzzlePattern; world.puzzleIndex = state.puzzleIndex; world.gateOpen = state.gateOpen;
@@ -276,8 +358,10 @@ export async function createGameScene(engine: Engine, canvas: HTMLCanvasElement)
     if (me) {
       world.health = me.health; world.stamina = me.stamina; world.inventory = me.inventory.map(item => ({ ...item })); world.hidden = me.hidden;
       world.flashlight = me.flashlight; world.battery = me.battery; flashlight.setEnabled(me.flashlight);
-      if (Math.hypot(cam.position.x - me.x, cam.position.z - me.z) > 1.15) { cam.position.x += (me.x - cam.position.x) * 0.55; cam.position.z += (me.z - cam.position.z) * 0.55; }
-      cam.rotation.y += Math.atan2(Math.sin(me.yaw - cam.rotation.y), Math.cos(me.yaw - cam.rotation.y)) * 0.35;
+      if (Math.hypot(cam.position.x - me.x, cam.position.z - me.z) > 3.0) {
+        cam.position.x = me.x;
+        cam.position.z = me.z;
+      }
     }
     world.escapes = state.players.filter(player => player.escaped).length;
     if (state.notice && state.notice !== onlineNotice) { onlineNotice = state.notice; world.say(state.notice); }
@@ -345,7 +429,13 @@ export async function createGameScene(engine: Engine, canvas: HTMLCanvasElement)
   };
   const interact = () => {
     const point = cameraWorld();
-    world.interact(point); audio.cue(170, 0.1, 0.04);
+    const prevCount = world.inventory.length;
+    world.interact(point);
+    if (world.inventory.length > prevCount) {
+      audio.pickupItem();
+    } else {
+      audio.cue(170, 0.1, 0.04);
+    }
   };
 
   let prevTime = performance.now();
@@ -463,14 +553,16 @@ export async function createGameScene(engine: Engine, canvas: HTMLCanvasElement)
       if (input.justPressed("use")) onlineState?.phase === "playing" ? roomClient.action("use", currentSlot) : world.useItem(cameraWorld(), currentSlot);
       if (input.justPressed("pause")) { if (onlineState?.phase === "playing") world.say("A shared shift cannot pause."); else world.phase = "paused"; }
       if (input.justPressed("sprint") && !sprinting) world.say("Your breath is still recovering.");
-      flashlight.direction = cam.getDirection(Vector3.Forward());
 
       for (const item of world.items) {
         let itemMesh = itemMeshes.get(item.id);
         if (!itemMesh) { itemMesh = createItemMesh(item); itemMeshes.set(item.id, itemMesh); }
         itemMesh.position.x = item.point.x; itemMesh.position.z = item.point.z;
         itemMesh.setEnabled(!item.collected);
-        if (!item.collected) itemMesh.position.y = 0.32 + Math.sin(now * 0.002 + item.point.x) * 0.055;
+        if (!item.collected) {
+          itemMesh.position.y = 0.35 + Math.sin(now * 0.003 + item.point.x) * 0.055;
+          itemMesh.rotation.y = now * 0.0018;
+        }
       }
       const p = cameraWorld();
       if (world.gateOpen && !gateWasOpen) { gateBars.forEach(bar => bar.setEnabled(false)); gateWasOpen = true; }
@@ -497,10 +589,14 @@ export async function createGameScene(engine: Engine, canvas: HTMLCanvasElement)
       eyeB.position.set(head.position.x + 0.13, 2.52, head.position.z + 0.08);
       armA.position.set(monster.x - 0.42, 1.3, monster.z); armB.position.set(monster.x + 0.42, 1.3, monster.z);
       armA.rotation.z = 0.18; armB.rotation.z = -0.18;
-      const closeDanger = distance < 12;
-      body.isVisible = closeDanger || monster.mode === "chase" || monster.mode === "enraged";
-      head.isVisible = body.isVisible; eyeA.isVisible = eyeB.isVisible = body.isVisible && distance < 8;
-      armA.isVisible = armB.isVisible = body.isVisible;
+      body.isVisible = true;
+      head.isVisible = true;
+      armA.isVisible = true;
+      armB.isVisible = true;
+      eyeA.isVisible = true;
+      eyeB.isVisible = true;
+      const enraged = monster.mode === "chase" || monster.mode === "enraged";
+      eyeMat.emissiveColor = enraged ? new Color3(0.95, 0.18, 0.05) : new Color3(0.68, 0.08, 0.025);
       for (const model of remotePlayers.values()) {
         model.body.position.x += (model.target.x - model.body.position.x) * 0.28;
         model.body.position.z += (model.target.z - model.body.position.z) * 0.28;
@@ -532,7 +628,7 @@ export async function createGameScene(engine: Engine, canvas: HTMLCanvasElement)
       }
       ui.render(snapshot, world.items.filter(item => item.collected).length, currentSlot);
       ui.renderTeam(onlineState?.players ?? [], roomClient.playerId);
-      audio.update(gameDt, monster.mode, distance, world.flashlight);
+      audio.update(gameDt, monster.mode, distance, world.flashlight, isMoving, sprinting, crouched);
   };
   const observer = scene.onBeforeRenderObservable.add(onFrame);
 

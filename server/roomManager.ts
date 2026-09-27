@@ -247,7 +247,11 @@ export class RoomManager {
         const inventory = this.allPlayers(room).flatMap(p => p.inventory);
         const parts = required.filter(id => inventory.some(item => item.id === id)).length;
         if (parts < 3) { this.say(room, `Relay needs a fuse, spool, and valve. ${parts}/3 types secured by the team.`); return; }
-        room.relayPuzzleActive = true; room.puzzleIndex = 0; this.say(room, "The relay is live. Match the three signal lamps in order."); return;
+        if (!room.relayPuzzleActive) {
+          room.relayPuzzleActive = true; room.puzzleIndex = 0; this.say(room, "The relay is live. Match the three signal lamps in order."); return;
+        }
+        this.act(room, player, "switch", room.puzzlePattern[room.puzzleIndex]);
+        return;
       }
       if (Math.hypot(point.x - 28, point.z + 28) < 5) {
         if (room.gateOpen) {

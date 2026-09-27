@@ -213,7 +213,17 @@ export class GameUI {
   setPrompt(text: string) {
     this.prompt = text;
     const el = this.root.querySelector<HTMLElement>("#prompt");
-    if (el) { el.innerHTML = text ? `<kbd>E</kbd> ${text}` : ""; el.classList.toggle("visible", Boolean(text)); }
+    if (!el) return;
+    if (text) {
+      el.innerHTML = `<kbd>E</kbd> ${text}`;
+      el.classList.add("visible");
+    } else if (!this.input.isLocked && this.currentPhase === "playing") {
+      el.innerHTML = `<span style="color:#c5a676; letter-spacing:0.12em; font-size:9px;">CLICK SCREEN TO CONTROL CAMERA</span>`;
+      el.classList.add("visible");
+    } else {
+      el.innerHTML = "";
+      el.classList.remove("visible");
+    }
   }
 
   renderTeam(players: OnlinePlayerState[], ownId: string) {

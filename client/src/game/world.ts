@@ -113,7 +113,7 @@ export class GameWorld {
     if (this.noiseEvents.length > 20) this.noiseEvents.shift();
   }
 
-  nearestItem(point: WorldPoint, maxDistance = 2.6) {
+  nearestItem(point: WorldPoint, maxDistance = 2.8) {
     return this.items.filter(item => !item.collected).map(item => ({ item, distance: Math.hypot(item.point.x - point.x, item.point.z - point.z) }))
       .filter(entry => entry.distance <= maxDistance).sort((a, b) => a.distance - b.distance)[0]?.item;
   }
@@ -138,7 +138,9 @@ export class GameWorld {
         this.relayPuzzleActive = true;
         this.puzzleIndex = 0;
         this.say("The relay is live. Match the three signal lamps in order.");
+        return;
       }
+      this.activateSwitch(this.puzzlePattern[this.puzzleIndex], point);
       return;
     }
     const nearGate = Math.hypot(point.x - 28, point.z + 28) < 5;
