@@ -332,6 +332,10 @@ export async function createGameScene(engine: Engine, canvas: HTMLCanvasElement)
       if (onlineState?.phase === "playing") roomClient.action("interact");
       else interact();
     },
+    onCloseDossier: () => {
+      world.closeDossier();
+      audio.pageRustle();
+    },
     onSwitch: index => { currentSlot = index; },
     onHide: () => onlineState?.phase === "playing" ? roomClient.action("hide") : world.tryHide(cameraWorld()),
     onFlashlight: () => {
@@ -348,13 +352,20 @@ export async function createGameScene(engine: Engine, canvas: HTMLCanvasElement)
     onPuzzleSwitch: index => { if (onlineState?.phase === "playing") roomClient.action("switch", index); else world.activateSwitch(index, cameraWorld()); audio.cue(220 + index * 40, 0.11, 0.06); },
     onCallout: phrase => { if (onlineState?.phase === "playing") roomClient.callout(phrase); else world.say(phrase); },
     onPause: () => {
+      world.closeDossier();
       if (onlineState?.phase === "playing") { world.say("A shared shift cannot pause. Leave the room to step away."); return; }
       if (world.phase === "playing") world.phase = "paused";
       else if (world.phase === "paused") { world.phase = "playing"; input.requestLock(); }
       else if (world.phase === "title") return;
       else if (world.phase === "results") world.phase = "title";
     },
-    onMenu: () => { if (onlineState) { roomClient.leave(); voice.dispose(); onlineState = null; remotePlayers.forEach(model => { model.body.dispose(); model.head.dispose(); }); remotePlayers.clear(); } world.phase = "title"; world.hidden = false; coopUI.reset(); },
+    onMenu: () => {
+      world.closeDossier();
+      if (onlineState) { roomClient.leave(); voice.dispose(); onlineState = null; remotePlayers.forEach(model => { model.body.dispose(); model.head.dispose(); }); remotePlayers.clear(); }
+      world.phase = "title";
+      world.hidden = false;
+      coopUI.reset();
+    },
     onAction: (action, down) => input.setAction(action, down),
     onJoystick: (x, y) => input.setJoystick(x, y),
   });
@@ -449,7 +460,7 @@ export async function createGameScene(engine: Engine, canvas: HTMLCanvasElement)
     const item = world.nearestItem(point);
     if (item) return `TAKE ${item.name.toUpperCase()}`;
     const dossier = world.nearestDossier(point);
-    if (dossier) return `READ DOSSIER · ${dossier.title} [E]`;
+    if (dossier && world.dossierCooldown <= 0) return `READ DOSSIER · ${dossier.title} [E]`;
     if (Math.hypot(point.x, point.z) < 5.4 && !world.relayReady) return world.relayPuzzleActive ? "ALIGN THE SIGNAL LAMPS · 1 / 2 / 3" : "EXAMINE THE RELAY CONSOLE";
     if (Math.hypot(point.x - 28, point.z + 28) < 5 && !world.gateOpen) return world.relayReady ? "UNLOCK THE IRON GATE" : "THE GATE IS DEAD";
     if (Math.hypot(point.x - 28, point.z + 28) < 5 && world.gateOpen) return "ESCAPE THROUGH THE GATE";
@@ -465,7 +476,7 @@ export async function createGameScene(engine: Engine, canvas: HTMLCanvasElement)
       return;
     }
     const dossier = world.nearestDossier(point);
-    if (!world.nearestItem(point) && dossier) {
+    if (!world.nearestItem(point) && dossier && world.dossierCooldown <= 0) {
       world.interact(point);
       audio.pageRustle();
       return;

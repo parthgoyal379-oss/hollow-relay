@@ -8,6 +8,7 @@ export interface UiCallbacks {
   onCoop: () => void;
   onStart: () => void;
   onInteract: () => void;
+  onCloseDossier: () => void;
   onSwitch: (index: number) => void;
   onHide: () => void;
   onFlashlight: () => void;
@@ -83,7 +84,7 @@ export class GameUI {
       </div>
 
       <!-- RESIDENT EVIL DOSSIER INSPECTOR -->
-      <section id="dossier-viewer" class="dossier-modal hidden-screen">
+      <section id="dossier-viewer" class="phase-screen dossier-modal hidden-screen">
         <div class="dossier-paper">
           <div class="dossier-stamp" id="dossier-stamp">TOP SECRET</div>
           <div class="dossier-header">
@@ -231,10 +232,7 @@ export class GameUI {
       else if (action === "help") { this.helpOpen = true; this.showOnly("help-screen"); }
       else if (action === "close-help") { this.helpOpen = false; this.showOnly("title-screen"); }
       else if (action === "close-dossier") {
-        this.previewDossier = null;
-        this.callbacks.onInteract();
-        const viewer = this.root.querySelector<HTMLElement>("#dossier-viewer");
-        viewer?.classList.add("hidden-screen");
+        this.closeDossier();
       }
       else if (action === "dossier-archive") {
         this.archiveOpen = true;
@@ -294,16 +292,14 @@ export class GameUI {
         }
         return;
       }
-      if (event.code === "Escape") {
+      if (event.code === "Escape" || event.code === "KeyE") {
         const viewer = this.root.querySelector<HTMLElement>("#dossier-viewer");
         if (viewer && !viewer.classList.contains("hidden-screen")) {
           event.preventDefault();
-          this.previewDossier = null;
-          this.callbacks.onInteract();
-          viewer.classList.add("hidden-screen");
+          this.closeDossier();
           return;
         }
-        if (this.archiveOpen) {
+        if (event.code === "Escape" && this.archiveOpen) {
           event.preventDefault();
           this.archiveOpen = false;
           this.showOnly("");
@@ -321,6 +317,14 @@ export class GameUI {
       }
     };
 
+    const viewer = this.root.querySelector<HTMLElement>("#dossier-viewer");
+    const viewerClick = (event: MouseEvent) => {
+      if (event.target === viewer) {
+        this.closeDossier();
+      }
+    };
+    viewer?.addEventListener("click", viewerClick);
+
     this.root.addEventListener("click", click);
     this.root.addEventListener("click", docClick);
     this.root.addEventListener("pointerdown", down);
@@ -330,6 +334,7 @@ export class GameUI {
     this.root.addEventListener("click", callout);
     window.addEventListener("keydown", keyHandler);
     this.cleanup.push(
+      () => viewer?.removeEventListener("click", viewerClick),
       () => this.root.removeEventListener("click", click),
       () => this.root.removeEventListener("click", docClick),
       () => this.root.removeEventListener("pointerdown", down),
@@ -372,13 +377,27 @@ export class GameUI {
     );
   }
 
+  closeDossier() {
+    this.previewDossier = null;
+    this.callbacks.onCloseDossier();
+    const viewer = this.root.querySelector<HTMLElement>("#dossier-viewer");
+    viewer?.classList.add("hidden-screen");
+    if (this.currentPhase === "playing") {
+      this.input.requestLock();
+    }
+  }
+
   private showOnly(id: string) {
     this.root.querySelectorAll<HTMLElement>(".phase-screen").forEach(node => {
-      if (node.id !== "dossier-viewer") node.classList.add("hidden-screen");
+      node.classList.add("hidden-screen");
     });
-    if (!id) return;
-    const node = this.root.querySelector<HTMLElement>(`#${id}`);
-    if (node) node.classList.remove("hidden-screen");
+    if (id) {
+      const node = this.root.querySelector<HTMLElement>(`#${id}`);
+      if (node) node.classList.remove("hidden-screen");
+    }
+    const viewer = this.root.querySelector<HTMLElement>("#dossier-viewer");
+    viewer?.classList.add("hidden-screen");
+    this.previewDossier = null;
   }
 
   showDossier(doc: LoreDocument) {
@@ -401,6 +420,9 @@ export class GameUI {
     if (footer) footer.textContent = doc.footer || "";
 
     viewer.classList.remove("hidden-screen");
+    if (document.pointerLockElement) {
+      document.exitPointerLock?.();
+    }
   }
 
   renderArchiveList() {
@@ -489,12 +511,13 @@ export class GameUI {
     }
 
     // Dossier inspector synchronization
-    if (snapshot.activeDossier) {
+    if (snapshot.activeDossier && phase === "playing") {
       this.readDossierIds.add(snapshot.activeDossier.id);
       this.showDossier(snapshot.activeDossier);
-    } else if (!this.previewDossier) {
+    } else if (phase !== "playing" || !this.previewDossier) {
       const viewer = $("#dossier-viewer");
       viewer?.classList.add("hidden-screen");
+      if (phase !== "playing") this.previewDossier = null;
     }
 
     const timer = $("#timer"); if (timer) timer.textContent = fmt(snapshot.remaining);

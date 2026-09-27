@@ -19,7 +19,7 @@ export const LORE_DOCUMENTS: LoreDocument[] = [
     date: "OCTOBER 14, 1947",
     roomName: "Flooded Archive",
     roomId: "archive",
-    point: { x: -14.5, z: -13.5 },
+    point: { x: -10.5, z: -17.0 },
     classifiedStamp: "TOP SECRET // LEVEL 5",
     lines: [
       "To all Telegraph & Acoustic Staff:",

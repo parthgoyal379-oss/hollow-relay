@@ -37,6 +37,7 @@ export class GameWorld {
   puzzlePattern = [1, 3, 2];
   readDossiers: Set<string> = new Set();
   activeDossier: LoreDocument | null = null;
+  dossierCooldown = 0;
   private random = seeded(Date.now());
   private noticeTimer = 6;
   private damageCooldown = 0;
@@ -74,6 +75,7 @@ export class GameWorld {
     this.puzzlePattern = this.random() > 0.5 ? [2, 1, 3] : [1, 3, 2];
     this.readDossiers.clear();
     this.activeDossier = null;
+    this.dossierCooldown = 0;
     const pool = [...spawnPoints].sort(() => this.random() - 0.5);
     const types: ItemId[] = ["fuse", "spool", "valve", "gateKey", "fuelCell", "medkit", "noiseMaker", "battery"];
     this.items = types.map((type, index) => {
@@ -87,6 +89,7 @@ export class GameWorld {
     if (this.phase !== "playing") return;
     this.elapsed += dt;
     this.damageCooldown = Math.max(0, this.damageCooldown - dt);
+    this.dossierCooldown = Math.max(0, this.dossierCooldown - dt);
     this.noticeTimer = Math.max(0, this.noticeTimer - dt);
     this.noiseEvents = this.noiseEvents.filter(event => (performance.now() - event.at) < 12000);
     this.noise = Math.max(0, this.noise - dt * 0.23);
@@ -130,12 +133,13 @@ export class GameWorld {
 
   closeDossier() {
     this.activeDossier = null;
+    this.dossierCooldown = 0.5;
   }
 
   interact(point: WorldPoint) {
     if (this.phase !== "playing") return;
     if (this.activeDossier) {
-      this.activeDossier = null;
+      this.closeDossier();
       return;
     }
     if (this.hidden) { this.hidden = false; this.say("You ease out of the hiding place."); this.makeNoise(point, 0.05, "movement"); return; }
@@ -149,7 +153,7 @@ export class GameWorld {
       return;
     }
     const dossier = this.nearestDossier(point);
-    if (dossier) {
+    if (dossier && this.dossierCooldown <= 0) {
       this.activeDossier = dossier;
       this.readDossiers.add(dossier.id);
       this.say(`Archived: ${dossier.title}`);
