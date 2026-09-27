@@ -255,6 +255,15 @@ export class GameUI {
       if (phase === "title") this.showOnly("title-screen");
     }
     const $ = <T extends HTMLElement>(selector: string) => this.root.querySelector<T>(selector);
+    const vignette = $(".game-vignette");
+    if (vignette) {
+      const danger = snapshot.monsterMode === "chase" || snapshot.monsterMode === "enraged" || snapshot.monsterDistance < 4.5;
+      const close = !danger && snapshot.monsterDistance < 9.0;
+      vignette.classList.toggle("threat-danger", danger && phase === "playing");
+      vignette.classList.toggle("threat-close", close && phase === "playing");
+      vignette.classList.toggle("stealth-hidden", snapshot.hidden && phase === "playing");
+      vignette.classList.toggle("health-critical", snapshot.health < 35 && phase === "playing");
+    }
     const timer = $("#timer"); if (timer) timer.textContent = fmt(snapshot.remaining);
     const objective = $("#objective"); if (objective) objective.textContent = snapshot.objective;
     const progress = $("#progress-fill"); if (progress) progress.style.width = `${snapshot.relayReady ? snapshot.gateOpen ? 100 : 70 : Math.min(64, snapshot.relayParts * 14 + (snapshot.relayReady ? 25 : 0))}%`;
