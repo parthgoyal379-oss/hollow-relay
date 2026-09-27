@@ -139,14 +139,14 @@ export async function createGameScene(engine: Engine, canvas: HTMLCanvasElement)
   outdoorMat.diffuseColor = new Color3(0.075, 0.095, 0.071); outdoorMat.specularColor = new Color3(0.035, 0.04, 0.03);
   const darkWood = makeMat(scene, "blackened-wood", new Color3(0.105, 0.082, 0.061));
   const trimMat = makeMat(scene, "oxidized-iron", new Color3(0.14, 0.18, 0.16), new Color3(0.04, 0.055, 0.045));
-  const amberMat = makeMat(scene, "amber-lantern", new Color3(0.22, 0.13, 0.055), new Color3(0.78, 0.43, 0.12));
-  amberMat.emissiveColor = new Color3(0.78, 0.43, 0.12);
+  const amberMat = makeMat(scene, "amber-lantern", new Color3(0.22, 0.13, 0.055), new Color3(1.4, 0.75, 0.2));
+  amberMat.emissiveColor = new Color3(1.4, 0.75, 0.2);
   const redMat = makeMat(scene, "warning-red", new Color3(0.27, 0.025, 0.018), new Color3(0.72, 0.04, 0.015));
   redMat.emissiveColor = new Color3(0.72, 0.04, 0.015);
   const furnitureMat = makeMat(scene, "dust-cloth", new Color3(0.17, 0.18, 0.15));
   const entityMat = makeMat(scene, "listener-shadow", new Color3(0.012, 0.016, 0.015), new Color3(0.012, 0.018, 0.014));
-  const eyeMat = makeMat(scene, "listener-ember", new Color3(0.27, 0.055, 0.02), new Color3(0.62, 0.075, 0.025));
-  eyeMat.emissiveColor = new Color3(0.85, 0.15, 0.05);
+  const eyeMat = makeMat(scene, "listener-ember", new Color3(0.4, 0.08, 0.02), new Color3(1.6, 0.25, 0.04));
+  eyeMat.emissiveColor = new Color3(1.6, 0.25, 0.04);
 
   const brassMat = makeMat(scene, "antique-brass", new Color3(0.55, 0.42, 0.15), new Color3(0.85, 0.65, 0.25));
   const clothMat = makeMat(scene, "damask-cloth", new Color3(0.48, 0.46, 0.42), new Color3(0.08, 0.08, 0.08));
@@ -160,8 +160,8 @@ export async function createGameScene(engine: Engine, canvas: HTMLCanvasElement)
   const carpetVelvet = makeMat(scene, "velvet-carpet", new Color3(0.28, 0.04, 0.03), new Color3(0.06, 0.02, 0.02));
   const stoneMat = makeMat(scene, "weathered-stone", new Color3(0.32, 0.34, 0.31), new Color3(0.05, 0.05, 0.05));
   const parchmentPaper = makeMat(scene, "parchment-paper", new Color3(0.68, 0.62, 0.48), new Color3(0.02, 0.02, 0.02));
-  const fireGlowMat = makeMat(scene, "firebox-glow", new Color3(0.95, 0.38, 0.05), new Color3(1.0, 0.55, 0.1));
-  fireGlowMat.emissiveColor = new Color3(0.95, 0.38, 0.05);
+  const fireGlowMat = makeMat(scene, "firebox-glow", new Color3(0.95, 0.38, 0.05), new Color3(2.0, 0.85, 0.15));
+  fireGlowMat.emissiveColor = new Color3(2.0, 0.85, 0.15);
 
   interface DoorEntry {
     id: string;
@@ -749,15 +749,21 @@ export async function createGameScene(engine: Engine, canvas: HTMLCanvasElement)
   // ==========================================
   // CHIEF ENGINEER COLE — BIO-ACOUSTIC PREDATOR
   // ==========================================
-  const coleMat = makeMat(scene, "listener-necrotic-hide", new Color3(0.025, 0.028, 0.026), new Color3(0.018, 0.012, 0.01));
-  const boneMat = makeMat(scene, "listener-bone-carapace", new Color3(0.32, 0.28, 0.22), new Color3(0.05, 0.04, 0.03));
-  const coreMat = makeMat(scene, "listener-resonator-core", new Color3(0.55, 0.15, 0.05), new Color3(0.85, 0.22, 0.06));
+  const coleMat = makeMat(scene, "listener-necrotic-hide", new Color3(0.04, 0.042, 0.038), new Color3(0.06, 0.025, 0.015));
+  const boneMat = makeMat(scene, "listener-bone-carapace", new Color3(0.35, 0.30, 0.24), new Color3(0.12, 0.08, 0.04));
+  const coreMat = makeMat(scene, "listener-resonator-core", new Color3(0.7, 0.2, 0.06), new Color3(1.8, 0.45, 0.08));
 
   const body = MeshBuilder.CreateCapsule("listener-body", { height: 2.35, radius: 0.36, tessellation: 8, subdivisions: 2 }, scene);
   body.material = coleMat; body.isPickable = false;
 
-  const core = MeshBuilder.CreateSphere("listener-core", { diameter: 0.3, segments: 6 }, scene);
+  const core = MeshBuilder.CreateSphere("listener-core", { diameter: 0.42, segments: 8 }, scene);
   core.material = coreMat; core.isPickable = false;
+
+  // Pulsating point light emanating from Cole's bio-acoustic chest cavity
+  const coreLight = new PointLight("cole-core-light", new Vector3(0, 1.38, 0), scene);
+  coreLight.diffuse = new Color3(1.0, 0.42, 0.08);
+  coreLight.intensity = 3.5;
+  coreLight.range = 12;
 
   const head = MeshBuilder.CreateSphere("listener-head", { diameter: 0.54, segments: 8 }, scene);
   head.material = coleMat; head.isPickable = false;
@@ -793,7 +799,7 @@ export async function createGameScene(engine: Engine, canvas: HTMLCanvasElement)
   // Sonic Shockwave Floor Ring
   const sonicWave = MeshBuilder.CreateTorus("sonic-shockwave", { diameter: 1.0, thickness: 0.08, tessellation: 24 }, scene);
   const sonicMat = new StandardMaterial("sonic-wave-mat", scene);
-  sonicMat.emissiveColor = new Color3(0.95, 0.35, 0.08);
+  sonicMat.emissiveColor = new Color3(1.8, 0.6, 0.12);
   sonicMat.alpha = 0;
   sonicWave.material = sonicMat;
   sonicWave.position.y = 0.08;
@@ -1128,14 +1134,19 @@ export async function createGameScene(engine: Engine, canvas: HTMLCanvasElement)
       // Pulse the bio-acoustic chest cavity
       const pulseSpeed = enraged ? 0.014 : 0.006;
       const pulse = 0.65 + Math.sin(now * pulseSpeed) * 0.35;
-      coreMat.emissiveColor = enraged ? new Color3(0.98, 0.25, 0.05).scale(pulse) : new Color3(0.75, 0.18, 0.04).scale(pulse);
-      core.scaling.set(0.9 + pulse * 0.25, 0.9 + pulse * 0.25, 0.9 + pulse * 0.25);
+      coreMat.emissiveColor = enraged ? new Color3(2.2, 0.55, 0.08).scale(pulse) : new Color3(1.8, 0.4, 0.06).scale(pulse);
+      core.scaling.set(0.9 + pulse * 0.3, 0.9 + pulse * 0.3, 0.9 + pulse * 0.3);
 
       body.position.set(monster.x, 1.22 + mBobY, monster.z);
       body.rotation.y = monster.yaw;
       body.rotation.x = enraged ? 0.28 : 0.12;
 
       core.position.set(monster.x + Math.sin(monster.yaw) * 0.12, 1.38 + mBobY, monster.z + Math.cos(monster.yaw) * 0.12);
+
+      // Move the core light with Cole and pulse its intensity
+      coreLight.position.set(core.position.x, core.position.y, core.position.z);
+      coreLight.intensity = (enraged ? 5.5 : 3.5) * pulse;
+      coreLight.diffuse = enraged ? new Color3(1.0, 0.3, 0.04) : new Color3(1.0, 0.42, 0.08);
 
       // Spine dorsal spikes
       for (let i = 0; i < spineSpikes.length; i++) {
@@ -1163,7 +1174,7 @@ export async function createGameScene(engine: Engine, canvas: HTMLCanvasElement)
       eyeA.position.set(head.position.x - Math.cos(monster.yaw) * 0.13 + Math.sin(monster.yaw) * 0.18, head.position.y + 0.04, head.position.z + Math.sin(monster.yaw) * 0.13 + Math.cos(monster.yaw) * 0.18);
       eyeB.position.set(head.position.x + Math.cos(monster.yaw) * 0.13 + Math.sin(monster.yaw) * 0.18, head.position.y + 0.04, head.position.z - Math.sin(monster.yaw) * 0.13 + Math.cos(monster.yaw) * 0.18);
 
-      eyeMat.emissiveColor = enraged ? new Color3(0.98, 0.16, 0.04) : new Color3(0.68, 0.07, 0.02);
+      eyeMat.emissiveColor = enraged ? new Color3(2.4, 0.35, 0.06) : new Color3(1.6, 0.18, 0.04);
 
       // Asymmetric arms stride
       const armSpread = 0.44;
